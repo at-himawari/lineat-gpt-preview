@@ -1,0 +1,26 @@
+{
+  "name": "line-chatbot-azure-openai",
+  "version": "1.0.0",
+  "description": "LINE Bot with Azure OpenAI and MySQL conversation history",
+  "main": "src/handlers/webhook.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "cdk deploy",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy",
+    "local": "sam local start-api -t cdk.out/LineChatbotStack.template.json"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^8.0.0",
+    "mysql2": "^3.6.0",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.110.0",
+    "aws-cdk-lib": "^2.110.0",
+    "constructs": "^10.3.0",
+    "typescript": "^5.3.0"
+  }
+}
