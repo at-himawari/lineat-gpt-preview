@@ -6,6 +6,7 @@ AWS CDK を使用して AWS Lambda で Azure OpenAI に接続し、LINE の API 
 
 - LINE Messaging API を使用したチャットボット
 - Azure OpenAI (GPT-4o) による自然な会話
+- **完全無料の Web 検索機能（DuckDuckGo API）** - API キー不要で最新情報に対応
 - MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
 - AWS CDK によるインフラストラクチャ管理（Serverless Framework 不要）
 - AWS Lambda でのサーバーレス実行
@@ -45,10 +46,15 @@ npx cdk bootstrap
 LINE_CHANNEL_ACCESS_TOKEN=your_actual_line_channel_access_token
 LINE_CHANNEL_SECRET=your_actual_line_channel_secret
 
-# Azure OpenAI設定（オプション）
+# Azure OpenAI設定（必須）
 AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
+
+# Web検索API設定（オプション）
+# DuckDuckGoは完全無料・APIキー不要（デフォルトで有効）
+# SerpApiは無料プラン月100回まで（オプション強化）
+SERPAPI_API_KEY=your_serpapi_key_optional
 
 # MySQL設定（オプション）
 DB_HOST=your_mysql_host
@@ -166,6 +172,7 @@ aws iam attach-role-policy \
 - `DB_PASSWORD`: MySQL パスワード
 - `DB_NAME`: MySQL データベース名
 - `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（通常は `false`）
+- `SERPAPI_API_KEY`: SerpApi API キー（オプション - 月 100 回まで無料）
 
 3. **デプロイ**
 
@@ -194,6 +201,7 @@ npm run local
 - `src/handlers/webhook.js` - LINE Webhook ハンドラー
 - `src/services/line.js` - LINE API 関連処理
 - `src/services/openai.js` - Azure OpenAI API 処理
+- `src/services/search.js` - Web 検索機能（DuckDuckGo + SerpApi）
 - `src/services/database.js` - MySQL 操作
 - `src/utils/logger.js` - ログ出力ユーティリティ
 
@@ -207,6 +215,7 @@ npm run local
 ### その他
 
 - `database/schema.sql` - データベーススキーマ
+- `docs/WEB_SEARCH_SETUP.md` - Web 検索機能の詳細ガイド
 - `package.json` - 依存関係とスクリプト
 
 ## AWS CDK の利点
