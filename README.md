@@ -5,7 +5,7 @@ AWS CDK を使用して AWS Lambda で Azure OpenAI に接続し、LINE の API 
 ## 機能
 
 - LINE Messaging API を使用したチャットボット
-- Azure OpenAI (GPT-4o) による自然な会話
+- Azure OpenAI (GPT-5.1-chat) による自然な会話
 - **完全無料の Web 検索機能（DuckDuckGo API）** - API キー不要で最新情報に対応
 - MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
 - AWS CDK によるインフラストラクチャ管理（Serverless Framework 不要）
