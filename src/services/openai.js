@@ -10,6 +10,7 @@ function needsWebSearch(message) {
     "検索",
     "調べて",
     "探して",
+    "教えて",
     "最新",
     "外交",
     "自民党",
