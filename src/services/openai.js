@@ -27,15 +27,11 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     // Web検索が必要か判定
     let searchContext = "";
     if (needsWebSearch(userMessage)) {
-      logger.info("Web search triggered", { query: userMessage });
       const searchResults = await searchWeb(userMessage, 3);
       if (searchResults.length > 0) {
         searchContext = `\n\n【参考情報（Web検索結果）】\n${formatSearchResults(
           searchResults
         )}`;
-        logger.info("Search results added to context", {
-          resultCount: searchResults.length,
-        });
       }
     }
 
@@ -53,7 +49,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     const systemPrompt =
       "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学見地からもアドバイスを行ってください。" +
       (searchContext
-        ? "\n\n※参考情報としてWeb検索結果が提供されている場合は、その情報を自然に活用して回答してください。必要に応じて情報源のURLも提示してください。"
+        ? "\n\n※参考情報としてWeb検索結果が提供されている場合は、その情報を自然に活用して回答してください。必要に応じて情報源のURLも提示してください。参考情報は、自動的に追加されているので、ユーザには参考情報が追加されたことを明示しないでください。"
         : "");
 
     // メッセージの構築
@@ -74,21 +70,11 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       },
     ];
 
-    logger.info("Calling Azure OpenAI", {
-      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
-      messageCount: messages.length,
-    });
-
     const response = await openai.chat.completions.create({
       model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
       messages: messages,
       max_completion_tokens: 1000,
       temperature: 1,
-    });
-
-    logger.info("Azure OpenAI response received", {
-      usage: response.usage,
     });
 
     return response.choices[0].message.content;
