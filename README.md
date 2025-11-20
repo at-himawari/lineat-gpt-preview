@@ -5,10 +5,21 @@ AWS CDK を使用して AWS Lambda で Azure OpenAI に接続し、LINE の API 
 ## 機能
 
 - LINE Messaging API を使用したチャットボット
-- Azure OpenAI による自然な会話
-- MySQL でのユーザー管理と会話履歴保存
-- AWS CDK によるインフラストラクチャ管理
+- Azure OpenAI (GPT-4o) による自然な会話
+- MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
+- AWS CDK によるインフラストラクチャ管理（Serverless Framework 不要）
 - AWS Lambda でのサーバーレス実行
+- 自己署名 SSL 証明書対応
+- エラーハンドリング（DB 接続失敗時も AI 応答は継続）
+
+## アーキテクチャ
+
+```text
+LINE User → LINE Messaging API → API Gateway → AWS Lambda → Azure OpenAI
+                                                    ↓
+                                                MySQL Database
+                                                (会話履歴保存)
+```
 
 ## セットアップ
 
@@ -26,24 +37,30 @@ npx cdk bootstrap
 
 ### 3. 環境変数の設定
 
-以下の環境変数を設定してください：
+`.env`ファイルを編集して、実際の認証情報を設定してください：
 
 ```bash
-# LINE Bot設定
-export LINE_CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
-export LINE_CHANNEL_SECRET=your_line_channel_secret
+# .envファイルを編集
+# LINE Bot設定（必須）
+LINE_CHANNEL_ACCESS_TOKEN=your_actual_line_channel_access_token
+LINE_CHANNEL_SECRET=your_actual_line_channel_secret
 
-# Azure OpenAI設定
-export AZURE_OPENAI_API_KEY=your_azure_openai_api_key
-export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-export AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
+# Azure OpenAI設定（オプション）
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
 
-# MySQL設定
-export DB_HOST=your_mysql_host
-export DB_USER=your_mysql_user
-export DB_PASSWORD=your_mysql_password
-export DB_NAME=your_database_name
+# MySQL設定（オプション）
+DB_HOST=your_mysql_host
+DB_USER=your_mysql_user
+DB_PASSWORD=your_mysql_password
+DB_NAME=your_database_name
+
+# デバッグ設定（テスト時のみ）
+SKIP_SIGNATURE_VALIDATION=false
 ```
+
+**重要**: `.env`ファイルは`.gitignore`に含まれているため、Git にコミットされません。
 
 ### 4. データベースの準備
 

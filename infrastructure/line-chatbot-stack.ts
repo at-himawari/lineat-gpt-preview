@@ -31,16 +31,7 @@ export class LineChatbotStack extends cdk.Stack {
     const webhookFunction = new lambda.Function(this, "WebhookFunction", {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "handlers/webhook.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../src"), {
-        bundling: {
-          image: lambda.Runtime.NODEJS_20_X.bundlingImage,
-          command: [
-            "bash",
-            "-c",
-            "cp -r /asset-input/* /asset-output/ && cd /asset-output && npm install --production",
-          ],
-        },
-      }),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../src")),
       role: lambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
@@ -56,6 +47,8 @@ export class LineChatbotStack extends cdk.Stack {
         DB_USER: process.env.DB_USER || "",
         DB_PASSWORD: process.env.DB_PASSWORD || "",
         DB_NAME: process.env.DB_NAME || "",
+        SKIP_SIGNATURE_VALIDATION:
+          process.env.SKIP_SIGNATURE_VALIDATION || "false",
       },
     });
 
@@ -69,16 +62,31 @@ export class LineChatbotStack extends cdk.Stack {
       },
     });
 
-    // Lambda統合
+    // Lambda統合（プロキシ統合）
     const lambdaIntegration = new apigateway.LambdaIntegration(
       webhookFunction,
       {
-        requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        proxy: true,
+        integrationResponses: [
+          {
+            statusCode: "200",
+          },
+        ],
       }
     );
 
     // /webhook エンドポイント
-    api.root.addResource("webhook").addMethod("POST", lambdaIntegration);
+    const webhookResource = api.root.addResource("webhook");
+    webhookResource.addMethod("POST", lambdaIntegration, {
+      methodResponses: [
+        {
+          statusCode: "200",
+          responseParameters: {
+            "method.response.header.Content-Type": true,
+          },
+        },
+      ],
+    });
 
     // 出力
     new cdk.CfnOutput(this, "ApiGatewayUrl", {
