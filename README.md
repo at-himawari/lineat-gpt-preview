@@ -99,20 +99,92 @@ npm run deploy     # スタックデプロイ
 npm run destroy    # スタック削除
 ```
 
+## CI/CD
+
+GitHub Actions を使用した自動デプロイが設定されています。
+
+### セットアップ手順
+
+1. **AWS IAM ロールの作成**
+
+GitHub Actions が AWS にアクセスするための OIDC プロバイダーとロールを作成します：
+
+```bash
+# AWS CLIで実行
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+
+# 信頼ポリシーを作成（trust-policy.json）
+cat > trust-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::YOUR_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:*"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+# ロールを作成
+aws iam create-role \
+  --role-name GitHubActionsDeployRole \
+  --assume-role-policy-document file://trust-policy.json
+
+# 必要なポリシーをアタッチ
+aws iam attach-role-policy \
+  --role-name GitHubActionsDeployRole \
+  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+```
+
+2. **GitHub Secrets の設定**
+
+リポジトリの Settings → Secrets and variables → Actions で以下のシークレットを追加：
+
+- `AWS_ROLE_ARN`: 作成した IAM ロールの ARN（例: `arn:aws:iam::123456789012:role/GitHubActionsDeployRole`）
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン
+- `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット
+- `AZURE_OPENAI_API_KEY`: Azure OpenAI API キー
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI エンドポイント
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Azure OpenAI デプロイメント名
+- `DB_HOST`: MySQL ホスト
+- `DB_USER`: MySQL ユーザー
+- `DB_PASSWORD`: MySQL パスワード
+- `DB_NAME`: MySQL データベース名
+- `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（通常は `false`）
+
+3. **デプロイ**
+
+`main` ブランチにプッシュすると自動的にデプロイされます：
+
+```bash
+git add .
+git commit -m "Deploy to AWS"
+git push origin main
+```
+
+手動でデプロイする場合は、GitHub の Actions タブから "Deploy to AWS" ワークフローを実行できます。
+
 ## ローカル開発
 
 ```bash
 # CDKテンプレートを生成してからSAM CLIで実行
 npm run synth
 npm run local
-```
-
-## アーキテクチャ
-
-```text
-LINE User → LINE Messaging API → API Gateway → AWS Lambda → Azure OpenAI
-                                                    ↓
-                                                MySQL Database
 ```
 
 ## ファイル構成
