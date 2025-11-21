@@ -35,7 +35,7 @@ async function createOrUpdateUser(userId) {
 
     if (rows.length === 0) {
       await conn.execute(
-        "INSERT INTO users (line_user_id, created_at, updated_at) VALUES (?, NOW(), NOW())",
+        "INSERT INTO users (line_user_id, message_count_3days, count_reset_at, created_at, updated_at) VALUES (?, 0, NOW(), NOW(), NOW())",
         [userId]
       );
       logger.info(`New user created: ${userId}`);
@@ -47,6 +47,59 @@ async function createOrUpdateUser(userId) {
     }
   } catch (error) {
     logger.error("Database error in createOrUpdateUser:", error);
+    throw error;
+  }
+}
+
+async function checkAndUpdateMessageLimit(userId) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザー情報を取得
+    const [rows] = await conn.execute(
+      "SELECT id, message_count_3days, count_reset_at FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const user = rows[0];
+    const now = new Date();
+    const resetTime = new Date(user.count_reset_at);
+    const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+
+    // 3日経過していればカウントをリセット
+    if (now - resetTime >= threeDaysInMs) {
+      await conn.execute(
+        "UPDATE users SET message_count_3days = 1, count_reset_at = NOW() WHERE line_user_id = ?",
+        [userId]
+      );
+      logger.info(`Message count reset for user: ${userId}`);
+      return { allowed: true, count: 1 };
+    }
+
+    // 100通以上送信している場合は制限
+    if (user.message_count_3days >= 100) {
+      logger.warn(`Message limit reached for user: ${userId}`);
+      return { allowed: false, count: user.message_count_3days };
+    }
+
+    // カウントを増やす
+    await conn.execute(
+      "UPDATE users SET message_count_3days = message_count_3days + 1 WHERE line_user_id = ?",
+      [userId]
+    );
+
+    logger.info(
+      `Message count updated for user: ${userId}, count: ${
+        user.message_count_3days + 1
+      }`
+    );
+    return { allowed: true, count: user.message_count_3days + 1 };
+  } catch (error) {
+    logger.error("Database error in checkAndUpdateMessageLimit:", error);
     throw error;
   }
 }
@@ -110,4 +163,5 @@ module.exports = {
   createOrUpdateUser,
   saveMessage,
   getConversationHistory,
+  checkAndUpdateMessageLimit,
 };

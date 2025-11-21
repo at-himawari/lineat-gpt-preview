@@ -175,10 +175,26 @@ async function webhookHandler(event, context) {
                   createOrUpdateUser,
                   saveMessage,
                   getConversationHistory,
+                  checkAndUpdateMessageLimit,
                 } = require("../services/database");
 
                 // ユーザーを作成/更新
                 await createOrUpdateUser(userId);
+
+                // メッセージ送信制限をチェック
+                const limitCheck = await checkAndUpdateMessageLimit(userId);
+                if (!limitCheck.allowed) {
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: "申し訳ございません。3日間で100通のメッセージ制限に達しました。しばらく時間をおいてから再度お試しください。",
+                      },
+                    ],
+                  });
+                  continue;
+                }
 
                 // ユーザーメッセージを保存
                 await saveMessage(userId, "user", userMessage);
