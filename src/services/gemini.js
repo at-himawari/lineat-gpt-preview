@@ -1,13 +1,11 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI } = require("@google/genai");
 const logger = require("../utils/logger");
 
 async function getChatResponse(userMessage, conversationHistory = []) {
   try {
     // Gemini APIクライアントの初期化
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-      tools: [{ googleSearch: {} }],
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
     });
 
     // システムプロンプト
@@ -20,47 +18,68 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       ],
     };
 
-    // Gemini用に会話履歴を変換
-    let history = conversationHistory.map((msg) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
-    }));
+    // Gemini用に会話履歴を変換（システムプロンプトを先頭に追加）
+    let contents = [systemInstruction];
 
-    // Geminiでは履歴の最初は必ず'user'ロールである必要がある
-    // 最初が'model'の場合は削除
-    while (history.length > 0 && history[0].role === "model") {
-      history.shift();
-    }
-
-    // チャットセッションを開始
-    const chat = model.startChat({
-      history: history,
-      generationConfig: {
-        maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
-        temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
-      },
-      systemInstruction: systemInstruction,
+    // 会話履歴を追加
+    conversationHistory.forEach((msg) => {
+      contents.push({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      });
     });
 
-    // メッセージを送信
-    const result = await chat.sendMessage(userMessage);
-    const response = result.response;
+    // Geminiでは履歴の最初は必ず'user'ロールである必要がある
+    // システムプロンプトの後、最初が'model'の場合は削除
+    while (contents.length > 1 && contents[1].role === "model") {
+      contents.splice(1, 1);
+    }
 
-    // candidatesから最初のテキストを取得
-    if (!response.candidates || response.candidates.length === 0) {
-      logger.error("No candidates in Gemini response");
+    // 現在のユーザーメッセージを追加
+    contents.push({
+      role: "user",
+      parts: [{ text: userMessage }],
+    });
+
+    // Google Search toolsを有効化
+    const tools = [{ googleSearch: {} }];
+
+    const config = {
+      thinkingConfig: {
+        thinkingLevel: "HIGH",
+      },
+      tools,
+      maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
+      temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
+    };
+
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+
+    // ストリーミングで応答を取得
+    const response = await ai.models.generateContentStream({
+      model,
+      config,
+      contents,
+    });
+
+    let fullText = "";
+    for await (const chunk of response) {
+      if (chunk.text) {
+        fullText += chunk.text;
+      }
+    }
+
+    if (!fullText) {
+      logger.error("No text in Gemini response");
       throw new Error("Gemini APIから応答がありませんでした");
     }
 
-    const candidate = response.candidates[0];
-    const text = candidate.content.parts.map((part) => part.text).join("");
-
-    return text;
+    return fullText;
   } catch (error) {
     logger.error("Gemini API error:", {
       message: error.message,
       status: error.status,
-      response: error.response?.data,
+      stack: error.stack,
     });
     throw new Error("AI応答の生成に失敗しました: " + error.message);
   }
