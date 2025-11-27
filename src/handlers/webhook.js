@@ -233,9 +233,26 @@ async function webhookHandler(event, context) {
                   originalLength: aiResponse.length,
                   maxLength: MAX_LINE_MESSAGE_LENGTH,
                 });
+
+                // 文の途中で切れないように、最後の句点・改行で切る
+                const truncateLength = MAX_LINE_MESSAGE_LENGTH - 30;
+                let truncated = aiResponse.substring(0, truncateLength);
+
+                // 最後の句点または改行を探す
+                const lastPeriod = Math.max(
+                  truncated.lastIndexOf("。"),
+                  truncated.lastIndexOf("\n"),
+                  truncated.lastIndexOf("！"),
+                  truncated.lastIndexOf("？")
+                );
+
+                if (lastPeriod > truncateLength * 0.8) {
+                  // 80%以上の位置に句点があれば、そこで切る
+                  truncated = truncated.substring(0, lastPeriod + 1);
+                }
+
                 finalResponse =
-                  aiResponse.substring(0, MAX_LINE_MESSAGE_LENGTH - 20) +
-                  "\n\n（文字数制限のため省略）";
+                  truncated + "\n\n（文字数制限のため省略されました）";
               }
 
               // AI応答を保存（DBが利用可能な場合のみ）
@@ -253,12 +270,6 @@ async function webhookHandler(event, context) {
                 text: finalResponse,
               };
 
-              logger.info("Attempting to send reply", {
-                replyTokenPresent: !!lineEvent.replyToken,
-                messageLength: finalResponse.length,
-                messagePreview: finalResponse.substring(0, 100),
-              });
-
               await client.replyMessage({
                 replyToken: lineEvent.replyToken,
                 messages: [replyMessage],
@@ -270,16 +281,7 @@ async function webhookHandler(event, context) {
                 error: replyError.message,
                 stack: replyError.stack,
                 status: replyError.response?.status,
-                statusText: replyError.response?.statusText,
                 data: replyError.response?.data,
-                headers: replyError.response?.headers,
-                config: replyError.config
-                  ? {
-                      url: replyError.config.url,
-                      method: replyError.config.method,
-                      data: replyError.config.data,
-                    }
-                  : undefined,
               });
 
               // エラー時はエラーメッセージを返す
