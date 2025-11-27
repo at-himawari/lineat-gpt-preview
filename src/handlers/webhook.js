@@ -230,9 +230,16 @@ async function webhookHandler(event, context) {
                 dbAvailable = false;
               }
 
+              // userMessageと履歴で同じものを送信してしまうのを防ぐため
+              // 配列の先頭は削除する
+              conversationHistory.shift();
+
               // Gemini APIから応答を取得
               const { getChatResponse } = require("../services/gemini");
-              const aiResponse = await getChatResponse(conversationHistory);
+              const aiResponse = await getChatResponse(
+                userMessage,
+                conversationHistory
+              );
 
               logger.info("AI response generated", {
                 responseLength: aiResponse.length,
