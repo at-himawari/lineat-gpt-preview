@@ -224,11 +224,25 @@ async function webhookHandler(event, context) {
                 dbAvailable: dbAvailable,
               });
 
+              // LINEメッセージの最大文字数は5000文字
+              const MAX_LINE_MESSAGE_LENGTH = 5000;
+              let finalResponse = aiResponse;
+
+              if (aiResponse.length > MAX_LINE_MESSAGE_LENGTH) {
+                logger.warn("Response too long, truncating", {
+                  originalLength: aiResponse.length,
+                  maxLength: MAX_LINE_MESSAGE_LENGTH,
+                });
+                finalResponse =
+                  aiResponse.substring(0, MAX_LINE_MESSAGE_LENGTH - 20) +
+                  "\n\n（文字数制限のため省略）";
+              }
+
               // AI応答を保存（DBが利用可能な場合のみ）
               if (dbAvailable) {
                 try {
                   const { saveMessage } = require("../services/database");
-                  await saveMessage(userId, "assistant", aiResponse);
+                  await saveMessage(userId, "assistant", finalResponse);
                 } catch (dbError) {
                   logger.error("Failed to save AI response to DB:", dbError);
                 }
@@ -236,7 +250,7 @@ async function webhookHandler(event, context) {
 
               const replyMessage = {
                 type: "text",
-                text: aiResponse,
+                text: finalResponse,
               };
 
               await client.replyMessage({
