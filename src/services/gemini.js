@@ -1,0 +1,48 @@
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const logger = require("../utils/logger");
+
+async function getChatResponse(userMessage, conversationHistory = []) {
+  try {
+    // Gemini APIクライアントの初期化
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+    });
+
+    // システムプロンプト
+    const systemPrompt =
+      "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。";
+
+    // Gemini用に会話履歴を変換
+    const history = conversationHistory.map((msg) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }));
+
+    // チャットセッションを開始
+    const chat = model.startChat({
+      history: history,
+      generationConfig: {
+        maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
+        temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
+      },
+      systemInstruction: systemPrompt,
+    });
+
+    // メッセージを送信
+    const result = await chat.sendMessage(userMessage);
+    const response = result.response;
+    return response.text();
+  } catch (error) {
+    logger.error("Gemini API error:", {
+      message: error.message,
+      status: error.status,
+      response: error.response?.data,
+    });
+    throw new Error("AI応答の生成に失敗しました: " + error.message);
+  }
+}
+
+module.exports = {
+  getChatResponse,
+};

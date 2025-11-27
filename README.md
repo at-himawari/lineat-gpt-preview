@@ -1,12 +1,11 @@
-# LINE Bot with Azure OpenAI and MySQL (AWS CDK)
+# LINE Bot with Google Gemini and MySQL (AWS CDK)
 
-AWS CDK を使用して AWS Lambda で Azure OpenAI に接続し、LINE の API を使って会話できるチャットボットです。ユーザー管理と会話履歴の保存に MySQL を使用します。
+AWS CDK を使用して AWS Lambda で Google Gemini API に接続し、LINE の API を使って会話できるチャットボットです。ユーザー管理と会話履歴の保存に MySQL を使用します。
 
 ## 機能
 
 - LINE Messaging API を使用したチャットボット
-- Azure OpenAI (GPT-5.1-chat) による自然な会話
-- **完全無料の Web 検索機能（DuckDuckGo API）** - API キー不要で最新情報に対応
+- Google Gemini API による自然な会話
 - MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
 - AWS CDK によるインフラストラクチャ管理（Serverless Framework 不要）
 - AWS Lambda でのサーバーレス実行
@@ -16,7 +15,7 @@ AWS CDK を使用して AWS Lambda で Azure OpenAI に接続し、LINE の API 
 ## アーキテクチャ
 
 ```text
-LINE User → LINE Messaging API → API Gateway → AWS Lambda → Azure OpenAI
+LINE User → LINE Messaging API → API Gateway → AWS Lambda → Google Gemini API
                                                     ↓
                                                 MySQL Database
                                                 (会話履歴保存)
@@ -46,15 +45,11 @@ npx cdk bootstrap
 LINE_CHANNEL_ACCESS_TOKEN=your_actual_line_channel_access_token
 LINE_CHANNEL_SECRET=your_actual_line_channel_secret
 
-# Azure OpenAI設定（必須）
-AZURE_OPENAI_API_KEY=your_azure_openai_api_key
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
-
-# Web検索API設定（オプション）
-# DuckDuckGoは完全無料・APIキー不要（デフォルトで有効）
-# SerpApiは無料プラン月100回まで（オプション強化）
-SERPAPI_API_KEY=your_serpapi_key_optional
+# Google Gemini API設定（必須）
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MAX_TOKENS=8000
+GEMINI_TEMPERATURE=1
 
 # MySQL設定（オプション）
 DB_HOST=your_mysql_host
@@ -164,15 +159,15 @@ aws iam attach-role-policy \
 - `AWS_ROLE_ARN`: 作成した IAM ロールの ARN（例: `arn:aws:iam::123456789012:role/GitHubActionsDeployRole`）
 - `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン
 - `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット
-- `AZURE_OPENAI_API_KEY`: Azure OpenAI API キー
-- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI エンドポイント
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Azure OpenAI デプロイメント名
+- `GEMINI_API_KEY`: Google Gemini API キー
+- `GEMINI_MODEL`: Gemini モデル名（例: `gemini-2.0-flash-exp`）
+- `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
+- `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
 - `DB_HOST`: MySQL ホスト
 - `DB_USER`: MySQL ユーザー
 - `DB_PASSWORD`: MySQL パスワード
 - `DB_NAME`: MySQL データベース名
 - `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（通常は `false`）
-- `SERPAPI_API_KEY`: SerpApi API キー（オプション - 月 100 回まで無料）
 
 3. **デプロイ**
 
@@ -200,8 +195,7 @@ npm run local
 
 - `src/handlers/webhook.js` - LINE Webhook ハンドラー
 - `src/services/line.js` - LINE API 関連処理
-- `src/services/openai.js` - Azure OpenAI API 処理
-- `src/services/search.js` - Web 検索機能（DuckDuckGo + SerpApi）
+- `src/services/gemini.js` - Google Gemini API 処理
 - `src/services/database.js` - MySQL 操作
 - `src/utils/logger.js` - ログ出力ユーティリティ
 
@@ -215,7 +209,6 @@ npm run local
 ### その他
 
 - `database/schema.sql` - データベーススキーマ
-- `docs/WEB_SEARCH_SETUP.md` - Web 検索機能の詳細ガイド
 - `package.json` - 依存関係とスクリプト
 
 ## AWS CDK の利点
@@ -228,7 +221,7 @@ npm run local
 
 ## 注意事項
 
-- Azure OpenAI の API キーとエンドポイントは適切に管理してください
+- Google Gemini API キーは適切に管理してください（https://aistudio.google.com/app/apikey から取得）
 - MySQL の接続情報は環境変数で管理し、直接コードに記述しないでください
 - LINE Bot の署名検証を必ず有効にしてください
 - CDK デプロイ前に必ず`cdk diff`で変更内容を確認してください

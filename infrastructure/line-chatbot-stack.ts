@@ -39,11 +39,10 @@ export class LineChatbotStack extends cdk.Stack {
       environment: {
         LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN || "",
         LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET || "",
-        AZURE_OPENAI_API_KEY: process.env.AZURE_OPENAI_API_KEY || "",
-        AZURE_OPENAI_ENDPOINT: process.env.AZURE_OPENAI_ENDPOINT || "",
-        AZURE_OPENAI_DEPLOYMENT_NAME:
-          process.env.AZURE_OPENAI_DEPLOYMENT_NAME || "",
-        SERPAPI_API_KEY: process.env.SERPAPI_API_KEY || "",
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+        GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+        GEMINI_MAX_TOKENS: process.env.GEMINI_MAX_TOKENS || "8000",
+        GEMINI_TEMPERATURE: process.env.GEMINI_TEMPERATURE || "1",
         DB_HOST: process.env.DB_HOST || "",
         DB_USER: process.env.DB_USER || "",
         DB_PASSWORD: process.env.DB_PASSWORD || "",
@@ -56,7 +55,7 @@ export class LineChatbotStack extends cdk.Stack {
     // API Gateway
     const api = new apigateway.RestApi(this, "LineChatbotApi", {
       restApiName: "LINE Chatbot API",
-      description: "API for LINE Chatbot with Azure OpenAI",
+      description: "API for LINE Chatbot with Google Gemini",
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,

@@ -212,8 +212,8 @@ async function webhookHandler(event, context) {
                 dbAvailable = false;
               }
 
-              // Azure OpenAIから応答を取得
-              const { getChatResponse } = require("../services/openai");
+              // Gemini APIから応答を取得
+              const { getChatResponse } = require("../services/gemini");
               const aiResponse = await getChatResponse(
                 userMessage,
                 conversationHistory
