@@ -42,9 +42,21 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     });
 
     // メッセージを送信
+    logger.info("Sending message to Gemini", {
+      userMessageLength: userMessage.length,
+      historyLength: history.length,
+    });
+
     const result = await chat.sendMessage(userMessage);
     const response = result.response;
-    return response.text();
+    const text = response.text();
+
+    logger.info("Gemini response received", {
+      responseLength: text.length,
+      responsePreview: text.substring(0, 100),
+    });
+
+    return text;
   } catch (error) {
     logger.error("Gemini API error:", {
       message: error.message,

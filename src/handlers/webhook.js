@@ -253,6 +253,12 @@ async function webhookHandler(event, context) {
                 text: finalResponse,
               };
 
+              logger.info("Attempting to send reply", {
+                replyTokenPresent: !!lineEvent.replyToken,
+                messageLength: finalResponse.length,
+                messagePreview: finalResponse.substring(0, 100),
+              });
+
               await client.replyMessage({
                 replyToken: lineEvent.replyToken,
                 messages: [replyMessage],
@@ -264,7 +270,16 @@ async function webhookHandler(event, context) {
                 error: replyError.message,
                 stack: replyError.stack,
                 status: replyError.response?.status,
+                statusText: replyError.response?.statusText,
                 data: replyError.response?.data,
+                headers: replyError.response?.headers,
+                config: replyError.config
+                  ? {
+                      url: replyError.config.url,
+                      method: replyError.config.method,
+                      data: replyError.config.data,
+                    }
+                  : undefined,
               });
 
               // エラー時はエラーメッセージを返す
