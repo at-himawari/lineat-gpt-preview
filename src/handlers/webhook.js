@@ -232,7 +232,7 @@ async function webhookHandler(event, context) {
 
               // userMessageと履歴で同じものを送信してしまうのを防ぐため
               // 配列の先頭は削除する
-              conversationHistory.shift();
+              conversationHistory.pop();
 
               // Gemini APIから応答を取得
               const { getChatResponse } = require("../services/gemini");
