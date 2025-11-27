@@ -1,10 +1,14 @@
 const logger = require("../utils/logger");
 
+// 処理済みreplyTokenを保持（Lambda実行中のみ有効）
+const processedTokens = new Set();
+
 async function webhookHandler(event, context) {
   logger.info("Webhook called", {
     headers: event.headers,
     bodyLength: event.body ? event.body.length : 0,
     isBase64Encoded: event.isBase64Encoded,
+    requestId: context.requestId,
   });
 
   try {
@@ -127,13 +131,27 @@ async function webhookHandler(event, context) {
       destination: parsedBody.destination,
     });
 
-    // イベント処理（Azure OpenAI連携 + DB保存）
+    // イベント処理（Gemini API連携 + DB保存）
     if (parsedBody.events && parsedBody.events.length > 0) {
       for (const lineEvent of parsedBody.events) {
+        // replyTokenの重複チェック
+        if (lineEvent.replyToken && processedTokens.has(lineEvent.replyToken)) {
+          logger.warn("Duplicate replyToken detected, skipping", {
+            replyToken: lineEvent.replyToken,
+          });
+          continue;
+        }
+
         logger.info("Processing event", {
           type: lineEvent.type,
           replyToken: lineEvent.replyToken ? "present" : "missing",
+          eventId: lineEvent.webhookEventId,
         });
+
+        // replyTokenを処理済みとしてマーク
+        if (lineEvent.replyToken) {
+          processedTokens.add(lineEvent.replyToken);
+        }
 
         if (lineEvent.type === "message") {
           const messageType = lineEvent.message.type;
