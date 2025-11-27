@@ -14,10 +14,16 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。";
 
     // Gemini用に会話履歴を変換
-    const history = conversationHistory.map((msg) => ({
+    let history = conversationHistory.map((msg) => ({
       role: msg.role === "assistant" ? "model" : "user",
       parts: [{ text: msg.content }],
     }));
+
+    // Geminiでは履歴の最初は必ず'user'ロールである必要がある
+    // 最初が'model'の場合は削除
+    while (history.length > 0 && history[0].role === "model") {
+      history.shift();
+    }
 
     // チャットセッションを開始
     const chat = model.startChat({
