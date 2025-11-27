@@ -40,9 +40,11 @@ export class LineChatbotStack extends cdk.Stack {
         LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN || "",
         LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET || "",
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
-        GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+        GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-2.5-flash",
         GEMINI_MAX_TOKENS: process.env.GEMINI_MAX_TOKENS || "8000",
         GEMINI_TEMPERATURE: process.env.GEMINI_TEMPERATURE || "1",
+        GEMINI_RESPONSE_CHAR_LIMIT:
+          process.env.GEMINI_RESPONSE_CHAR_LIMIT || "500",
         DB_HOST: process.env.DB_HOST || "",
         DB_USER: process.env.DB_USER || "",
         DB_PASSWORD: process.env.DB_PASSWORD || "",

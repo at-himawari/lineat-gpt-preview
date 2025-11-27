@@ -50,6 +50,7 @@ jobs:
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
           GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
           GEMINI_TEMPERATURE: ${{ secrets.GEMINI_TEMPERATURE }}
+          GEMINI_RESPONSE_CHAR_LIMIT: ${{ secrets.GEMINI_RESPONSE_CHAR_LIMIT }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}

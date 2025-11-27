@@ -50,6 +50,7 @@ GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.5-pro
 GEMINI_MAX_TOKENS=8000
 GEMINI_TEMPERATURE=1
+GEMINI_RESPONSE_CHAR_LIMIT=500
 
 # MySQL設定（オプション）
 DB_HOST=your_mysql_host
@@ -163,6 +164,7 @@ aws iam attach-role-policy \
 - `GEMINI_MODEL`: Gemini モデル名（例: `gemini-2.0-flash-exp`）
 - `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
 - `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
+- `GEMINI_RESPONSE_CHAR_LIMIT`: 応答の文字数制限（デフォルト: 500）
 - `DB_HOST`: MySQL ホスト
 - `DB_USER`: MySQL ユーザー
 - `DB_PASSWORD`: MySQL パスワード

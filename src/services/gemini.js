@@ -8,12 +8,16 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       apiKey: process.env.GEMINI_API_KEY,
     });
 
+    // 環境変数から文字数制限を取得（デフォルトは500文字）
+    const charLimit = process.env.GEMINI_RESPONSE_CHAR_LIMIT || "500";
+
     // システムプロンプト
     const systemInstruction = {
       role: "user",
       parts: [
         {
-          text: "あなたはカウンセラーです。ユーザーをカウンセリングしてください。医学的･心理学知見からもアドバイスを行ってください。返信は簡潔で500文字以内で返して",
+          text: `あなたはカウンセラーです。ユーザーをカウンセリングしてください。医学的･心理学知見からもアドバイスを行ってください。最新の情報や天気など、あなたの知識にない情報はGoogle検索機能を使って調べ、その結果に基づいて回答してください。
+返信は、LINEでの会話に適した読みやすい長さで、**必ず${charLimit}文字以内**で簡潔に返してください。`,
         },
       ],
     };
