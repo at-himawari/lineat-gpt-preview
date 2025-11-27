@@ -232,10 +232,7 @@ async function webhookHandler(event, context) {
 
               // Gemini APIから応答を取得
               const { getChatResponse } = require("../services/gemini");
-              const aiResponse = await getChatResponse(
-                userMessage,
-                conversationHistory
-              );
+              const aiResponse = await getChatResponse(conversationHistory);
 
               logger.info("AI response generated", {
                 responseLength: aiResponse.length,
