@@ -13,7 +13,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       role: "user",
       parts: [
         {
-          text: "あなたはカウンセラーです。ユーザーをカウンセリングしてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。返信は簡潔で500文字以内で返して",
+          text: "あなたはカウンセラーです。ユーザーをカウンセリングしてください。医学的･心理学知見からもアドバイスを行ってください。返信は簡潔で500文字以内で返して",
         },
       ],
     };
@@ -45,9 +45,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     const tools = [{ googleSearch: {} }];
 
     const config = {
-      thinkingConfig: {
-        thinkingLevel: "HIGH",
-      },
+      tools,
       maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
       temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
     };
@@ -58,7 +56,6 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     const response = await ai.models.generateContentStream({
       model,
       config,
-      tools,
       contents,
     });
 
