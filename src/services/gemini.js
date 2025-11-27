@@ -10,8 +10,14 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     });
 
     // システムプロンプト
-    const systemPrompt =
-      "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。";
+    const systemInstruction = {
+      role: "user",
+      parts: [
+        {
+          text: "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。",
+        },
+      ],
+    };
 
     // Gemini用に会話履歴を変換
     let history = conversationHistory.map((msg) => ({
@@ -32,7 +38,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
         maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
         temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
       },
-      systemInstruction: systemPrompt,
+      systemInstruction: systemInstruction,
     });
 
     // メッセージを送信
