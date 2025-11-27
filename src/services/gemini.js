@@ -7,9 +7,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
+      toolConfig: [{ google_search: {} }],
     });
 
     // システムプロンプト
@@ -17,7 +15,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       role: "user",
       parts: [
         {
-          text: "あなたはあざらしGPTです。あざらしとして振る舞いながら、ユーザーをカウンセリングしてください。ユーザーのメッセージに丁寧に答えてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。",
+          text: "あなたはカウンセラーです。ユーザーをカウンセリングしてください。分からないことや曖昧なことは、わからないとはっきり伝えましょう。医学的･心理学知見からもアドバイスを行ってください。返信は簡潔で500文字以内で返して",
         },
       ],
     };
