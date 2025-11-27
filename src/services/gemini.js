@@ -48,8 +48,26 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     });
 
     const result = await chat.sendMessage(userMessage);
+
+    logger.info("Gemini raw result", {
+      resultKeys: Object.keys(result),
+      responseKeys: result.response ? Object.keys(result.response) : null,
+      candidates: result.response?.candidates?.length,
+      promptFeedback: result.response?.promptFeedback,
+    });
+
     const response = result.response;
-    const text = response.text();
+
+    // candidatesから最初のテキストを取得
+    if (!response.candidates || response.candidates.length === 0) {
+      logger.error("No candidates in Gemini response", {
+        response: JSON.stringify(response),
+      });
+      throw new Error("Gemini APIから応答がありませんでした");
+    }
+
+    const candidate = response.candidates[0];
+    const text = candidate.content.parts.map((part) => part.text).join("");
 
     logger.info("Gemini response received", {
       responseLength: text.length,
