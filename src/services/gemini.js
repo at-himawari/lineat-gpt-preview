@@ -48,7 +48,6 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       thinkingConfig: {
         thinkingLevel: "HIGH",
       },
-      tools,
       maxOutputTokens: parseInt(process.env.GEMINI_MAX_TOKENS || "8000", 10),
       temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
     };
@@ -59,6 +58,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
     const response = await ai.models.generateContentStream({
       model,
       config,
+      tools,
       contents,
     });
 
