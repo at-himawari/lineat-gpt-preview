@@ -50,7 +50,7 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
     };
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
     // ストリーミングで応答を取得
     const response = await ai.models.generateContentStream({
