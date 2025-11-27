@@ -47,7 +47,7 @@ LINE_CHANNEL_SECRET=your_actual_line_channel_secret
 
 # Google Gemini API設定（必須）
 GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MODEL=gemini-2.5-pro
 GEMINI_MAX_TOKENS=8000
 GEMINI_TEMPERATURE=1
 
