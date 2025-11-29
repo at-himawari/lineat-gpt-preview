@@ -80,8 +80,9 @@ async function checkAndUpdateMessageLimit(userId) {
       return { allowed: true, count: 1 };
     }
 
-    // 300通以上送信している場合は制限
-    if (user.message_count_3days >= 300) {
+    // メッセージ制限をチェック
+    const messageLimit = parseInt(process.env.MESSAGE_LIMIT_3DAYS || "300", 10);
+    if (user.message_count_3days >= messageLimit) {
       logger.warn(`Message limit reached for user: ${userId}`);
       return { allowed: false, count: user.message_count_3days };
     }
@@ -444,9 +445,13 @@ async function processPaymentCompletion(
     // 商品タイプに応じて処理を分岐
     if (productType === "quota_extension") {
       // 枠を追加
+      const quotaExtension = parseInt(
+        process.env.MESSAGE_QUOTA_EXTENSION || "300",
+        10
+      );
       await conn.execute(
-        "UPDATE users SET message_count_3days = message_count_3days + 300 WHERE line_user_id = ?",
-        [userId]
+        "UPDATE users SET message_count_3days = message_count_3days + ? WHERE line_user_id = ?",
+        [quotaExtension, userId]
       );
       logger.info(`Quota extended for user: ${userId}`);
     } else if (productType === "model_upgrade") {
