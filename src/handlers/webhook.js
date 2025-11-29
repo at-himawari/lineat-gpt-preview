@@ -462,8 +462,10 @@ async function webhookHandler(event, context) {
                 : messageLimit;
 
               if (userStatus && remainingQuota <= 10) {
-                // 緊急警告（10件以下）
-                quotaWarning = `\n\n --- \n⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
+                // 残り枠が10件以下の場合に警告
+                quotaWarning = `\n\n⚠️ -- \n 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。${
+                  remainingQuota - 10
+                }`;
               }
 
               // LINEメッセージの最大文字数は5000文字
