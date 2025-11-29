@@ -205,6 +205,20 @@ async function webhookHandler(event, context) {
                 // 特定コマンドの処理
                 const trimmedMessage = userMessage.trim();
 
+                // "ヘルプ"コマンド: 利用可能なコマンド一覧を表示
+                if (trimmedMessage === "ヘルプ" || trimmedMessage === "help") {
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: `📖 利用可能なコマンド 📖\n\n【料金】\n料金プランと現在の利用状況を表示\n\n【枠】\n現在のメッセージ枠情報を表示\n\n【プレミアム】\nプレミアムモデルの購入\n\n【解約】\nサブスクリプションの解約・管理\n\nその他、通常のメッセージを送信するとAIが応答します。`,
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
                 // "プレミアム"コマンド: モデルアップグレード情報と決済リンク
                 if (trimmedMessage === "プレミアム") {
                   try {
@@ -254,6 +268,81 @@ async function webhookHandler(event, context) {
                         {
                           type: "text",
                           text: "決済リンクの生成に失敗しました。しばらく時間をおいてから再度お試しください。",
+                        },
+                      ],
+                    });
+                    continue;
+                  }
+                }
+
+                // "解約"コマンド: サブスクリプション解約リンクを送信
+                if (trimmedMessage === "解約") {
+                  try {
+                    userStatus = await getUserModelStatus(userId);
+
+                    if (!userStatus.hasPremium) {
+                      await client.replyMessage({
+                        replyToken: lineEvent.replyToken,
+                        messages: [
+                          {
+                            type: "text",
+                            text: "現在、プレミアムサブスクリプションをご利用いただいていません。",
+                          },
+                        ],
+                      });
+                      continue;
+                    }
+
+                    if (!userStatus.customerId) {
+                      await client.replyMessage({
+                        replyToken: lineEvent.replyToken,
+                        messages: [
+                          {
+                            type: "text",
+                            text: "顧客情報が見つかりませんでした。管理者にお問い合わせください。",
+                          },
+                        ],
+                      });
+                      continue;
+                    }
+
+                    // 顧客ポータルセッションを作成
+                    const {
+                      createCustomerPortalSession,
+                    } = require("../services/stripe");
+                    const portalSession = await createCustomerPortalSession(
+                      userStatus.customerId,
+                      "https://line.me"
+                    );
+
+                    await client.replyMessage({
+                      replyToken: lineEvent.replyToken,
+                      messages: [
+                        {
+                          type: "text",
+                          text: `🔧 サブスクリプション管理 🔧\n\n以下のリンクから、サブスクリプションの解約や支払い方法の変更ができます。\n\n⚠️ 解約後も、現在の請求期間の終了（${
+                            userStatus.subscriptionPeriodEnd
+                              ? new Date(
+                                  userStatus.subscriptionPeriodEnd
+                                ).toLocaleDateString("ja-JP")
+                              : "不明"
+                          }）まではプレミアムモデルをご利用いただけます。\n\n${
+                            portalSession.url
+                          }`,
+                        },
+                      ],
+                    });
+                    continue;
+                  } catch (error) {
+                    logger.error("Failed to create customer portal session:", {
+                      error: error.message,
+                    });
+                    await client.replyMessage({
+                      replyToken: lineEvent.replyToken,
+                      messages: [
+                        {
+                          type: "text",
+                          text: "顧客ポータルの生成に失敗しました。しばらく時間をおいてから再度お試しください。",
                         },
                       ],
                     });

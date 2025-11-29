@@ -244,14 +244,14 @@ async function activatePremiumModel(userId) {
 /**
  * ユーザーのモデルサブスクリプション状態を取得する
  * @param {string} userId - LINE ユーザーID
- * @returns {Promise<{hasPremium: boolean, activatedAt: Date|null, quota: number, resetAt: Date, subscriptionStatus: string|null}>}
+ * @returns {Promise<{hasPremium: boolean, activatedAt: Date|null, quota: number, resetAt: Date, subscriptionStatus: string|null, customerId: string|null}>}
  */
 async function getUserModelStatus(userId) {
   try {
     const conn = await getConnection();
 
     const [rows] = await conn.execute(
-      "SELECT has_premium_model, premium_activated_at, message_count_3days, count_reset_at, subscription_status, subscription_current_period_end FROM users WHERE line_user_id = ?",
+      "SELECT has_premium_model, premium_activated_at, message_count_3days, count_reset_at, subscription_status, subscription_current_period_end, stripe_customer_id FROM users WHERE line_user_id = ?",
       [userId]
     );
 
@@ -273,6 +273,7 @@ async function getUserModelStatus(userId) {
       resetAt: user.count_reset_at,
       subscriptionStatus: user.subscription_status,
       subscriptionPeriodEnd: user.subscription_current_period_end,
+      customerId: user.stripe_customer_id,
     };
   } catch (error) {
     logger.error("Database error in getUserModelStatus:", error);

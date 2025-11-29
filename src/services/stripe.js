@@ -460,10 +460,64 @@ async function handleInvoicePaymentFailed(invoice, databaseService) {
   }
 }
 
+/**
+ * Stripe顧客ポータルセッションを作成
+ * @param {string} customerId - Stripe カスタマー ID
+ * @param {string} returnUrl - ポータルから戻るURL
+ * @returns {Promise<{url: string}>} ポータルセッションURL
+ */
+async function createCustomerPortalSession(customerId, returnUrl) {
+  try {
+    const stripe = getStripeClient();
+
+    if (!customerId) {
+      throw new Error("Customer ID is required");
+    }
+
+    if (!returnUrl) {
+      returnUrl = process.env.STRIPE_SUCCESS_URL || "https://line.me";
+    }
+
+    // 顧客ポータルセッションを作成
+    const session = await retryWithExponentialBackoff(async () => {
+      return await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
+    });
+
+    logger.info("Customer portal session created", {
+      customerId,
+      sessionUrl: session.url,
+    });
+
+    return { url: session.url };
+  } catch (error) {
+    logger.error("Error creating customer portal session", {
+      error: error.message,
+      errorType: error.type,
+      statusCode: error.statusCode,
+      customerId,
+    });
+
+    // ユーザーフレンドリーなエラーメッセージを返す
+    if (error.type === "StripeAuthenticationError") {
+      throw new Error(
+        "決済システムの認証エラーが発生しました。管理者にお問い合わせください。"
+      );
+    } else {
+      throw new Error(
+        "顧客ポータルの生成中にエラーが発生しました。しばらく時間をおいてから再度お試しください。"
+      );
+    }
+  }
+}
+
 module.exports = {
   getStripeClient,
   validateEnvironmentVariables,
   createCheckoutSession,
   verifyWebhookSignature,
   handleWebhookEvent,
+  createCustomerPortalSession,
 };
