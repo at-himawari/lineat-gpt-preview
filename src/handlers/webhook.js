@@ -460,11 +460,10 @@ async function webhookHandler(event, context) {
               const remainingQuota = userStatus
                 ? messageLimit - userStatus.quota
                 : messageLimit;
-              if (userStatus && remainingQuota <= 50) {
-                if (remainingQuota <= 10) {
-                  // 緊急警告（10件以下）
-                  quotaWarning = `\n\n⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
-                }
+
+              if (userStatus && remainingQuota <= 10) {
+                // 緊急警告（10件以下）
+                quotaWarning = `\n\n --- \n⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
               }
 
               // LINEメッセージの最大文字数は5000文字
@@ -495,7 +494,7 @@ async function webhookHandler(event, context) {
                 }
 
                 finalResponse =
-                  truncated + "\n\n ---（文字数制限のため省略されました）";
+                  truncated + "\n\n --- \n（文字数制限のため省略されました）";
               }
 
               // AI応答を保存（DBが利用可能な場合のみ）
