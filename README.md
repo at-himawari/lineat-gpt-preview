@@ -7,6 +7,12 @@ AWS CDK を使用して AWS Lambda で Google Gemini API に接続し、LINE の
 - LINE Messaging API を使用したチャットボット
 - Google Gemini API による自然な会話
 - MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
+- **Stripe 決済統合による 2 段階課金システム**
+  - **メッセージ枠拡張**: 3 日間で 300 件のメッセージ制限を超えた場合、追加の 300 件を購入可能（買い切り：500 円）
+  - **プレミアムモデルアップグレード**: より高度な AI モデル（Gemini Pro）への月額サブスクリプション（月額 1,000 円）
+- **サブスクリプション管理**: 自動更新、解約、支払い失敗時の処理
+- **メッセージ使用量追跡**: 残り枠の表示と警告機能
+- **トランザクション管理**: 決済履歴の記録と監査
 - AWS CDK によるインフラストラクチャ管理（Serverless Framework 不要）
 - AWS Lambda でのサーバーレス実行
 - 自己署名 SSL 証明書対応
@@ -18,8 +24,49 @@ AWS CDK を使用して AWS Lambda で Google Gemini API に接続し、LINE の
 LINE User → LINE Messaging API → API Gateway → AWS Lambda → Google Gemini API
                                                     ↓
                                                 MySQL Database
-                                                (会話履歴保存)
+                                                (会話履歴・決済情報保存)
+                                                    ↑
+Stripe → Stripe Webhook → API Gateway → AWS Lambda (Stripe Handler)
 ```
+
+### 課金システムの仕組み
+
+1. **メッセージ枠管理**
+
+   - すべてのユーザーに 3 日間で 300 件のメッセージ枠を提供
+   - メッセージ送信ごとに枠を 1 減算
+   - 3 日経過後に自動的に 300 件にリセット
+   - 枠がゼロになると決済リンクを送信
+
+2. **決済フロー**
+
+   **メッセージ枠拡張（買い切り）:**
+
+   - ユーザーが枠を使い切る
+   - システムが Stripe Checkout セッションを作成（payment モード）
+   - ユーザーが Stripe で決済を完了（500 円）
+   - Stripe が webhook で決済完了を通知
+   - システムが枠に 300 件を追加
+
+   **プレミアムモデル（サブスクリプション）:**
+
+   - ユーザーがプレミアムモデルを要求
+   - システムが Stripe Checkout セッションを作成（subscription モード）
+   - ユーザーが Stripe で決済を完了（月額 1,000 円）
+   - Stripe が webhook で決済完了を通知
+   - システムがプレミアムモデルを有効化
+   - 毎月自動更新（支払い成功/失敗を webhook で処理）
+
+3. **AI モデル選択**
+
+   - 基本ユーザー: Gemini Flash モデル
+   - プレミアムユーザー: Gemini Pro モデル（より高度な推論能力）
+   - サブスクリプションが active 状態の場合のみプレミアムモデルを使用
+
+4. **サブスクリプション管理**
+   - 毎月の支払い成功: サブスクリプション継続
+   - 支払い失敗: ステータスが past_due に変更、プレミアムアクセス停止
+   - 解約: プレミアムモデルアクセスを無効化
 
 ## セットアップ
 
@@ -47,16 +94,26 @@ LINE_CHANNEL_SECRET=your_actual_line_channel_secret
 
 # Google Gemini API設定（必須）
 GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.5-pro
+GEMINI_BASIC_MODEL=gemini-2.0-flash-exp
+GEMINI_PREMIUM_MODEL=gemini-2.0-flash-thinking-exp-01-21
 GEMINI_MAX_TOKENS=8000
 GEMINI_TEMPERATURE=1
 GEMINI_RESPONSE_CHAR_LIMIT=500
 
-# MySQL設定（オプション）
+# MySQL設定（必須）
 DB_HOST=your_mysql_host
 DB_USER=your_mysql_user
 DB_PASSWORD=your_mysql_password
 DB_NAME=your_database_name
+
+# Stripe設定（必須）
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+STRIPE_QUOTA_PRICE_ID=price_your_quota_price_id
+STRIPE_PREMIUM_PRICE_ID=price_your_premium_price_id
+STRIPE_SUCCESS_URL=https://your-success-url.com
+STRIPE_CANCEL_URL=https://your-cancel-url.com
 
 # デバッグ設定（テスト時のみ）
 SKIP_SIGNATURE_VALIDATION=false
@@ -64,13 +121,35 @@ SKIP_SIGNATURE_VALIDATION=false
 
 **重要**: `.env`ファイルは`.gitignore`に含まれているため、Git にコミットされません。
 
+#### Stripe 設定の取得方法
+
+1. **Stripe アカウント作成**: https://stripe.com でアカウントを作成
+2. **API キーの取得**: Dashboard → Developers → API keys
+   - `STRIPE_SECRET_KEY`: Secret key（本番環境では `sk_live_...`、テスト環境では `sk_test_...`）
+   - `STRIPE_PUBLISHABLE_KEY`: Publishable key
+3. **商品と価格の作成**: Dashboard → Products
+   - メッセージ枠拡張商品を作成（例: 300 件 / 500 円）
+   - プレミアムモデル商品を作成（例: 1,000 円）
+   - 各商品の Price ID をコピー
+4. **Webhook シークレット**: デプロイ後に設定（後述）
+5. **リダイレクト URL**: 決済完了後のリダイレクト先 URL を設定
+
 ### 4. データベースの準備
 
-MySQL データベースに以下のスキーマを適用してください：
+MySQL データベースに以下のスキーマとマイグレーションを適用してください：
 
 ```bash
+# 初期スキーマの適用
 mysql -u your_user -p your_database < database/schema.sql
+
+# Stripe課金機能のマイグレーション
+mysql -u your_user -p your_database < database/migration_add_stripe_billing.sql
+
+# メッセージ制限の更新（既存ユーザーがいる場合）
+mysql -u your_user -p your_database < database/migration_add_message_limit.sql
 ```
+
+**注意**: マイグレーションは順番に実行してください。
 
 ### 5. デプロイ
 
@@ -85,11 +164,45 @@ npm run diff
 npm run deploy
 ```
 
-### 6. LINE Bot 設定
+### 6. Stripe Webhook の設定
+
+デプロイ後に Stripe Dashboard で webhook を設定します：
+
+1. Stripe Dashboard → Developers → Webhooks
+2. "Add endpoint" をクリック
+3. Endpoint URL: デプロイ時に出力された Stripe Webhook URL（例: `https://xxx.execute-api.ap-northeast-1.amazonaws.com/prod/stripe/webhook`）
+4. イベントを選択: `checkout.session.completed`
+5. Webhook signing secret をコピーして環境変数 `STRIPE_WEBHOOK_SECRET` に設定
+6. 再デプロイして webhook secret を反映
+
+### 7. LINE Bot 設定
 
 1. LINE Developers Console でチャンネルを作成
 2. デプロイ後に表示される Webhook URL を設定
 3. Webhook 使用を有効化
+
+## ユーザー向け機能
+
+### メッセージ枠の確認
+
+ユーザーは以下のコマンドで情報を確認できます：
+
+- **"枠"**: 現在の残り枠数と次のリセット日時を表示
+- **"料金"**: メッセージ枠拡張とプレミアムモデルの価格を表示
+- **"プレミアム"**: プレミアムモデルの説明と購入リンクを表示
+
+### 枠警告
+
+- 残り枠が 50 件未満: 警告メッセージを表示
+- 残り枠が 10 件未満: 緊急警告と決済準備を促すメッセージを表示
+- 残り枠が 0 件: 決済リンクを送信
+
+### 決済フロー
+
+1. ユーザーが枠を使い切るか、プレミアムモデルを要求
+2. システムが Stripe 決済リンクを送信
+3. ユーザーがリンクをクリックして Stripe で決済
+4. 決済完了後、自動的に枠が追加されるか、プレミアムモデルが有効化される
 
 ## CDK コマンド
 
@@ -161,7 +274,8 @@ aws iam attach-role-policy \
 - `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン
 - `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット
 - `GEMINI_API_KEY`: Google Gemini API キー
-- `GEMINI_MODEL`: Gemini モデル名（例: `gemini-2.0-flash-exp`）
+- `GEMINI_BASIC_MODEL`: 基本 Gemini モデル名（例: `gemini-2.0-flash-exp`）
+- `GEMINI_PREMIUM_MODEL`: プレミアム Gemini モデル名（例: `gemini-2.0-flash-thinking-exp-01-21`）
 - `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
 - `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
 - `GEMINI_RESPONSE_CHAR_LIMIT`: 応答の文字数制限（デフォルト: 500）
@@ -169,6 +283,13 @@ aws iam attach-role-policy \
 - `DB_USER`: MySQL ユーザー
 - `DB_PASSWORD`: MySQL パスワード
 - `DB_NAME`: MySQL データベース名
+- `STRIPE_SECRET_KEY`: Stripe シークレットキー
+- `STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー
+- `STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット
+- `STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID
+- `STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID
+- `STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL
+- `STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL
 - `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（通常は `false`）
 
 3. **デプロイ**
@@ -196,9 +317,11 @@ npm run local
 ### アプリケーションコード
 
 - `src/handlers/webhook.js` - LINE Webhook ハンドラー
+- `src/handlers/stripe-webhook.js` - Stripe Webhook ハンドラー
 - `src/services/line.js` - LINE API 関連処理
-- `src/services/gemini.js` - Google Gemini API 処理
-- `src/services/database.js` - MySQL 操作
+- `src/services/gemini.js` - Google Gemini API 処理（モデル選択機能付き）
+- `src/services/stripe.js` - Stripe 決済処理
+- `src/services/database.js` - MySQL 操作（枠管理・トランザクション記録）
 - `src/utils/logger.js` - ログ出力ユーティリティ
 
 ### インフラストラクチャコード
@@ -211,7 +334,10 @@ npm run local
 ### その他
 
 - `database/schema.sql` - データベーススキーマ
+- `database/migration_add_stripe_billing.sql` - Stripe 課金機能のマイグレーション
+- `database/migration_add_message_limit.sql` - メッセージ制限の更新
 - `package.json` - 依存関係とスクリプト
+- `docs/DEPLOYMENT.md` - 詳細なデプロイガイド
 
 ## AWS CDK の利点
 
@@ -221,9 +347,43 @@ npm run local
 - **CloudFormation**: AWS 標準の IaC ツール使用
 - **バージョン管理**: インフラコードの変更履歴管理
 
+## トラブルシューティング
+
+### Stripe Webhook が動作しない
+
+1. Webhook URL が正しく設定されているか確認
+2. Webhook secret が環境変数に正しく設定されているか確認
+3. CloudWatch Logs で Lambda のログを確認
+4. Stripe Dashboard の Webhook ログで配信状況を確認
+
+### 枠が正しく更新されない
+
+1. データベースのトランザクションログを確認
+2. `transactions` テーブルでステータスを確認
+3. Lambda のログでエラーを確認
+
+### プレミアムモデルが有効化されない
+
+1. `users` テーブルの `has_premium_model` カラムを確認
+2. Stripe の商品タイプが正しく設定されているか確認
+3. Webhook イベントが正しく処理されているか確認
+
+## セキュリティ
+
+- **API キーの管理**: すべての API キーは環境変数で管理し、コードに直接記述しない
+- **Webhook 署名検証**: LINE と Stripe の署名検証を必ず有効化
+- **データベース接続**: SSL/TLS を使用した暗号化接続を推奨
+- **本番環境**: Stripe の本番環境キーは慎重に管理し、テストキーと混同しない
+
 ## 注意事項
 
 - Google Gemini API キーは適切に管理してください（https://aistudio.google.com/app/apikey から取得）
 - MySQL の接続情報は環境変数で管理し、直接コードに記述しないでください
 - LINE Bot の署名検証を必ず有効にしてください
 - CDK デプロイ前に必ず`cdk diff`で変更内容を確認してください
+- Stripe のテストモードと本番モードを適切に使い分けてください
+- 詳細なデプロイ手順は `docs/DEPLOYMENT.md` を参照してください
+
+## ライセンス
+
+MIT

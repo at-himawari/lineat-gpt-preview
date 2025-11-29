@@ -1,7 +1,11 @@
 const { GoogleGenAI } = require("@google/genai");
 const logger = require("../utils/logger");
 
-async function getChatResponse(userMessage, conversationHistory = []) {
+async function getChatResponse(
+  userMessage,
+  conversationHistory = [],
+  modelType = "basic"
+) {
   try {
     // Gemini APIクライアントの初期化
     const ai = new GoogleGenAI({
@@ -54,7 +58,20 @@ async function getChatResponse(userMessage, conversationHistory = []) {
       temperature: parseFloat(process.env.GEMINI_TEMPERATURE || "1"),
     };
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    // モデルタイプに基づいてモデルを選択
+    let model;
+    if (modelType === "premium") {
+      model =
+        process.env.GEMINI_PREMIUM_MODEL ||
+        "gemini-2.0-flash-thinking-exp-01-21";
+      logger.info("Using premium model:", model);
+    } else {
+      model =
+        process.env.GEMINI_BASIC_MODEL ||
+        process.env.GEMINI_MODEL ||
+        "gemini-2.0-flash-exp";
+      logger.info("Using basic model:", model);
+    }
 
     // ストリーミングで応答を取得
     const response = await ai.models.generateContentStream({

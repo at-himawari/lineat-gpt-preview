@@ -47,7 +47,8 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          GEMINI_BASIC_MODEL: ${{ secrets.GEMINI_BASIC_MODEL }}
+          GEMINI_PREMIUM_MODEL: ${{ secrets.GEMINI_PREMIUM_MODEL }}
           GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
           GEMINI_TEMPERATURE: ${{ secrets.GEMINI_TEMPERATURE }}
           GEMINI_RESPONSE_CHAR_LIMIT: ${{ secrets.GEMINI_RESPONSE_CHAR_LIMIT }}
@@ -56,3 +57,10 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
           SKIP_SIGNATURE_VALIDATION: ${{ secrets.SKIP_SIGNATURE_VALIDATION }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_QUOTA_PRICE_ID: ${{ secrets.STRIPE_QUOTA_PRICE_ID }}
+          STRIPE_PREMIUM_PRICE_ID: ${{ secrets.STRIPE_PREMIUM_PRICE_ID }}
+          STRIPE_SUCCESS_URL: ${{ secrets.STRIPE_SUCCESS_URL }}
+          STRIPE_CANCEL_URL: ${{ secrets.STRIPE_CANCEL_URL }}

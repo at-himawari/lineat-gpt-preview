@@ -4,6 +4,7 @@
   "dependencies": {
     "@line/bot-sdk": "^8.0.0",
     "@google/genai": "^0.3.0",
-    "mysql2": "^3.6.0"
+    "mysql2": "^3.6.0",
+    "stripe": "^14.0.0"
   }
 }

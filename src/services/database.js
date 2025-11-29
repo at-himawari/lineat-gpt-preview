@@ -80,8 +80,8 @@ async function checkAndUpdateMessageLimit(userId) {
       return { allowed: true, count: 1 };
     }
 
-    // 100通以上送信している場合は制限
-    if (user.message_count_3days >= 100) {
+    // 300通以上送信している場合は制限
+    if (user.message_count_3days >= 300) {
       logger.warn(`Message limit reached for user: ${userId}`);
       return { allowed: false, count: user.message_count_3days };
     }
@@ -159,9 +159,419 @@ async function getConversationHistory(userId, limit = 10) {
   }
 }
 
+/**
+ * ユーザーのメッセージ枠を追加する（決済完了後）
+ * @param {string} userId - LINE ユーザーID
+ * @param {number} amount - 追加する枠数
+ * @returns {Promise<{success: boolean, newQuota: number}>}
+ */
+async function addMessageQuota(userId, amount) {
+  const conn = await getConnection();
+
+  try {
+    // トランザクション開始
+    await conn.beginTransaction();
+
+    // ユーザー情報を取得
+    const [rows] = await conn.execute(
+      "SELECT id, message_count_3days FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      await conn.rollback();
+      throw new Error("User not found");
+    }
+
+    const user = rows[0];
+    const newQuota = user.message_count_3days + amount;
+
+    // 枠を追加
+    await conn.execute(
+      "UPDATE users SET message_count_3days = message_count_3days + ? WHERE line_user_id = ?",
+      [amount, userId]
+    );
+
+    // トランザクションをコミット
+    await conn.commit();
+
+    logger.info(
+      `Message quota added for user: ${userId}, amount: ${amount}, new quota: ${newQuota}`
+    );
+    return { success: true, newQuota };
+  } catch (error) {
+    // エラー時はロールバック
+    await conn.rollback();
+    logger.error("Database error in addMessageQuota:", error);
+    throw error;
+  }
+}
+
+/**
+ * ユーザーのプレミアムモデルアクセスを有効化する
+ * @param {string} userId - LINE ユーザーID
+ * @returns {Promise<{success: boolean}>}
+ */
+async function activatePremiumModel(userId) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザー情報を取得
+    const [rows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    // プレミアムモデルアクセスを有効化
+    await conn.execute(
+      "UPDATE users SET has_premium_model = TRUE, premium_activated_at = NOW() WHERE line_user_id = ?",
+      [userId]
+    );
+
+    logger.info(`Premium model activated for user: ${userId}`);
+    return { success: true };
+  } catch (error) {
+    logger.error("Database error in activatePremiumModel:", error);
+    throw error;
+  }
+}
+
+/**
+ * ユーザーのモデルサブスクリプション状態を取得する
+ * @param {string} userId - LINE ユーザーID
+ * @returns {Promise<{hasPremium: boolean, activatedAt: Date|null, quota: number, resetAt: Date, subscriptionStatus: string|null}>}
+ */
+async function getUserModelStatus(userId) {
+  try {
+    const conn = await getConnection();
+
+    const [rows] = await conn.execute(
+      "SELECT has_premium_model, premium_activated_at, message_count_3days, count_reset_at, subscription_status, subscription_current_period_end FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const user = rows[0];
+
+    // サブスクリプションステータスがactiveの場合のみプレミアムアクセスを許可
+    const hasPremium =
+      user.has_premium_model === 1 && user.subscription_status === "active";
+
+    return {
+      hasPremium: hasPremium,
+      activatedAt: user.premium_activated_at,
+      quota: user.message_count_3days,
+      resetAt: user.count_reset_at,
+      subscriptionStatus: user.subscription_status,
+      subscriptionPeriodEnd: user.subscription_current_period_end,
+    };
+  } catch (error) {
+    logger.error("Database error in getUserModelStatus:", error);
+    throw error;
+  }
+}
+
+/**
+ * トランザクションを保存する
+ * @param {string} sessionId - Stripe セッション ID
+ * @param {string} userId - LINE ユーザーID
+ * @param {string} productType - 商品タイプ ('quota_extension' または 'model_upgrade')
+ * @param {number} amount - 金額
+ * @param {string} status - ステータス ('pending', 'completed', 'failed', 'cancelled')
+ * @returns {Promise<{success: boolean, transactionId: number}>}
+ */
+async function saveTransaction(
+  sessionId,
+  userId,
+  productType,
+  amount,
+  status = "pending"
+) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザーのDB IDを取得
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (userRows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const userDbId = userRows[0].id;
+
+    // トランザクションを保存
+    const [result] = await conn.execute(
+      "INSERT INTO transactions (stripe_session_id, user_id, product_type, amount, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+      [sessionId, userDbId, productType, amount, status]
+    );
+
+    logger.info(
+      `Transaction saved: sessionId=${sessionId}, userId=${userId}, productType=${productType}, amount=${amount}, status=${status}`
+    );
+    return { success: true, transactionId: result.insertId };
+  } catch (error) {
+    logger.error("Database error in saveTransaction:", error);
+    throw error;
+  }
+}
+
+/**
+ * トランザクションを更新する
+ * @param {string} sessionId - Stripe セッション ID
+ * @param {string} status - 新しいステータス
+ * @param {Date} completedAt - 完了日時（オプション）
+ * @returns {Promise<{success: boolean}>}
+ */
+async function updateTransaction(sessionId, status, completedAt = null) {
+  try {
+    const conn = await getConnection();
+
+    if (completedAt) {
+      await conn.execute(
+        "UPDATE transactions SET status = ?, completed_at = ? WHERE stripe_session_id = ?",
+        [status, completedAt, sessionId]
+      );
+    } else {
+      await conn.execute(
+        "UPDATE transactions SET status = ? WHERE stripe_session_id = ?",
+        [status, sessionId]
+      );
+    }
+
+    logger.info(
+      `Transaction updated: sessionId=${sessionId}, status=${status}`
+    );
+    return { success: true };
+  } catch (error) {
+    logger.error("Database error in updateTransaction:", error);
+    throw error;
+  }
+}
+
+/**
+ * ユーザーのトランザクション履歴を取得する
+ * @param {string} userId - LINE ユーザーID
+ * @returns {Promise<Array>} トランザクション履歴（降順）
+ */
+async function getTransactionHistory(userId) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザーのDB IDを取得
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (userRows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const userDbId = userRows[0].id;
+
+    // トランザクション履歴を取得（作成日時の降順）
+    const [rows] = await conn.execute(
+      "SELECT stripe_session_id, product_type, amount, currency, status, created_at, completed_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC",
+      [userDbId]
+    );
+
+    logger.info(`Retrieved ${rows.length} transactions for user: ${userId}`);
+    return rows;
+  } catch (error) {
+    logger.error("Database error in getTransactionHistory:", error);
+    throw error;
+  }
+}
+
+/**
+ * 決済完了処理をアトミックに実行する（トランザクション更新と枠/プレミアム更新）
+ * @param {string} sessionId - Stripe セッション ID
+ * @param {string} userId - LINE ユーザーID
+ * @param {string} productType - 商品タイプ ('quota_extension' または 'model_upgrade')
+ * @param {string} customerId - Stripe カスタマー ID（オプション）
+ * @param {string} subscriptionId - Stripe サブスクリプション ID（オプション）
+ * @returns {Promise<{success: boolean}>}
+ */
+async function processPaymentCompletion(
+  sessionId,
+  userId,
+  productType,
+  customerId = null,
+  subscriptionId = null
+) {
+  const conn = await getConnection();
+
+  try {
+    // トランザクション開始
+    await conn.beginTransaction();
+
+    // ユーザーのDB IDを取得
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (userRows.length === 0) {
+      await conn.rollback();
+      throw new Error("User not found");
+    }
+
+    const userDbId = userRows[0].id;
+
+    // トランザクションレコードを更新
+    if (customerId && subscriptionId) {
+      await conn.execute(
+        "UPDATE transactions SET status = 'completed', completed_at = NOW(), stripe_customer_id = ?, stripe_subscription_id = ? WHERE stripe_session_id = ?",
+        [customerId, subscriptionId, sessionId]
+      );
+    } else {
+      await conn.execute(
+        "UPDATE transactions SET status = 'completed', completed_at = NOW() WHERE stripe_session_id = ?",
+        [sessionId]
+      );
+    }
+
+    // 商品タイプに応じて処理を分岐
+    if (productType === "quota_extension") {
+      // 枠を追加
+      await conn.execute(
+        "UPDATE users SET message_count_3days = message_count_3days + 300 WHERE line_user_id = ?",
+        [userId]
+      );
+      logger.info(`Quota extended for user: ${userId}`);
+    } else if (productType === "model_upgrade") {
+      // プレミアムモデルを有効化（サブスクリプション情報も保存）
+      if (customerId && subscriptionId) {
+        await conn.execute(
+          "UPDATE users SET has_premium_model = TRUE, premium_activated_at = NOW(), stripe_customer_id = ?, stripe_subscription_id = ?, subscription_status = 'active' WHERE line_user_id = ?",
+          [customerId, subscriptionId, userId]
+        );
+      } else {
+        await conn.execute(
+          "UPDATE users SET has_premium_model = TRUE, premium_activated_at = NOW() WHERE line_user_id = ?",
+          [userId]
+        );
+      }
+      logger.info(`Premium model activated for user: ${userId}`);
+    } else {
+      await conn.rollback();
+      throw new Error(`Unknown product type: ${productType}`);
+    }
+
+    // トランザクションをコミット
+    await conn.commit();
+
+    logger.info(
+      `Payment completion processed atomically: sessionId=${sessionId}, userId=${userId}, productType=${productType}`
+    );
+    return { success: true };
+  } catch (error) {
+    // エラー時はロールバック
+    await conn.rollback();
+    logger.error("Database error in processPaymentCompletion:", error);
+    throw error;
+  }
+}
+
+/**
+ * サブスクリプションステータスを更新する
+ * @param {string} customerId - Stripe カスタマー ID
+ * @param {string} subscriptionId - Stripe サブスクリプション ID
+ * @param {string} status - サブスクリプションステータス
+ * @param {Date} currentPeriodEnd - 現在の期間終了日（オプション）
+ * @returns {Promise<{success: boolean}>}
+ */
+async function updateSubscriptionStatus(
+  customerId,
+  subscriptionId,
+  status,
+  currentPeriodEnd = null
+) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザー情報を取得
+    const [rows] = await conn.execute(
+      "SELECT id FROM users WHERE stripe_customer_id = ?",
+      [customerId]
+    );
+
+    if (rows.length === 0) {
+      logger.warn(`User not found for customer ID: ${customerId}`);
+      return { success: false };
+    }
+
+    // サブスクリプションステータスを更新
+    if (currentPeriodEnd) {
+      await conn.execute(
+        "UPDATE users SET subscription_status = ?, subscription_current_period_end = ?, has_premium_model = ? WHERE stripe_customer_id = ?",
+        [status, currentPeriodEnd, status === "active" ? 1 : 0, customerId]
+      );
+    } else {
+      await conn.execute(
+        "UPDATE users SET subscription_status = ?, has_premium_model = ? WHERE stripe_customer_id = ?",
+        [status, status === "active" ? 1 : 0, customerId]
+      );
+    }
+
+    logger.info(
+      `Subscription status updated: customerId=${customerId}, subscriptionId=${subscriptionId}, status=${status}`
+    );
+    return { success: true };
+  } catch (error) {
+    logger.error("Database error in updateSubscriptionStatus:", error);
+    throw error;
+  }
+}
+
+/**
+ * サブスクリプションを無効化する
+ * @param {string} customerId - Stripe カスタマー ID
+ * @param {string} subscriptionId - Stripe サブスクリプション ID
+ * @returns {Promise<{success: boolean}>}
+ */
+async function deactivateSubscription(customerId, subscriptionId) {
+  try {
+    const conn = await getConnection();
+
+    // プレミアムモデルアクセスを無効化
+    await conn.execute(
+      "UPDATE users SET has_premium_model = FALSE, subscription_status = 'canceled' WHERE stripe_customer_id = ?",
+      [customerId]
+    );
+
+    logger.info(
+      `Subscription deactivated: customerId=${customerId}, subscriptionId=${subscriptionId}`
+    );
+    return { success: true };
+  } catch (error) {
+    logger.error("Database error in deactivateSubscription:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createOrUpdateUser,
   saveMessage,
   getConversationHistory,
   checkAndUpdateMessageLimit,
+  addMessageQuota,
+  activatePremiumModel,
+  getUserModelStatus,
+  saveTransaction,
+  updateTransaction,
+  getTransactionHistory,
+  processPaymentCompletion,
+  updateSubscriptionStatus,
+  deactivateSubscription,
 };
