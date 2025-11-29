@@ -36,7 +36,6 @@ export class LineChatbotStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       logGroup: logGroup,
-      description: `Deployed at ${new Date().toISOString()}`,
       environment: {
         LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN || "",
         LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET || "",
