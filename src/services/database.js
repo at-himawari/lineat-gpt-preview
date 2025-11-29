@@ -263,7 +263,8 @@ async function getUserModelStatus(userId) {
 
     // サブスクリプションステータスがactiveの場合のみプレミアムアクセスを許可
     const hasPremium =
-      user.has_premium_model === 1 && user.subscription_status === "active";
+      (user.has_premium_model === 1 || user.has_premium_model === true) &&
+      user.subscription_status === "active";
 
     return {
       hasPremium: hasPremium,
