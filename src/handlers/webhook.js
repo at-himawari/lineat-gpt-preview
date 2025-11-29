@@ -265,6 +265,7 @@ async function webhookHandler(event, context) {
                 if (trimmedMessage === "料金") {
                   try {
                     userStatus = await getUserModelStatus(userId);
+                    const remainingQuota = 300 - userStatus.quota;
 
                     const quotaStatus = userStatus.hasPremium
                       ? ""
@@ -278,7 +279,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・500円（買い切り）\n・300件のメッセージ追加\n・3日間の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,000円（サブスクリプション）\n・より高度なAIモデル\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${userStatus.quota}件`,
+                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・500円（買い切り）\n・300件のメッセージ追加\n・3日間の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,000円（サブスクリプション）\n・より高度なAIモデル\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${remainingQuota}件`,
                         },
                       ],
                     });
@@ -304,6 +305,7 @@ async function webhookHandler(event, context) {
                 if (trimmedMessage === "枠") {
                   try {
                     userStatus = await getUserModelStatus(userId);
+                    const remainingQuota = 300 - userStatus.quota;
 
                     const resetDate = new Date(userStatus.resetAt);
                     const now = new Date();
@@ -321,7 +323,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `📊 メッセージ枠情報 📊\n\n現在の残り枠: ${userStatus.quota}件\nリセットまで: 約${hoursUntilReset}時間${minutesUntilReset}分\n\n枠がなくなった場合は、追加購入が可能です。`,
+                          text: `📊 メッセージ枠情報 📊\n\n現在の残り枠: ${remainingQuota}件\nリセットまで: 約${hoursUntilReset}時間${minutesUntilReset}分\n\n枠がなくなった場合は、追加購入が可能です。`,
                         },
                       ],
                     });
@@ -427,13 +429,14 @@ async function webhookHandler(event, context) {
 
               // 残り枠警告メッセージの追加
               let quotaWarning = "";
+              const remainingQuota = userStatus ? 300 - userStatus.quota : 300;
               if (userStatus && userStatus.quota < 50) {
                 if (userStatus.quota < 10) {
                   // 緊急警告（10件未満）
-                  quotaWarning = `\n\n⚠️ 残り枠: ${userStatus.quota}件\n枠がなくなる前に追加購入をご検討ください。`;
+                  quotaWarning = `\n\n ---⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
                 } else {
                   // 通常警告（50件未満）
-                  quotaWarning = `\n\n📢 残り枠: ${userStatus.quota}件`;
+                  quotaWarning = `\n\n---📢 残り枠: ${remainingQuota}件`;
                 }
               }
 
@@ -465,7 +468,7 @@ async function webhookHandler(event, context) {
                 }
 
                 finalResponse =
-                  truncated + "\n\n（文字数制限のため省略されました）";
+                  truncated + "\n\n ---（文字数制限のため省略されました）";
               }
 
               // AI応答を保存（DBが利用可能な場合のみ）
