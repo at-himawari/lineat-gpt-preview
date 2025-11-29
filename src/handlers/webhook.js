@@ -239,7 +239,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `🌟 プレミアムモデルアップグレード 🌟\n\nより高度なAIモデル（Gemini Pro）で、さらに質の高い会話をお楽しみいただけます。\n\n✨ プレミアムモデルの特徴：\n・より深い推論能力\n・より正確な回答\n・複雑な質問への対応\n\n💰 料金：月額1,000円\n※毎月自動更新されます\n※いつでも解約可能\n\n以下のリンクから決済を完了してください：\n${session.url}`,
+                          text: `🌟 プレミアムモデルアップグレード 🌟\n\nより高度なAIモデル（Gemini Pro）で、さらに質の高い会話をお楽しみいただけます。\n\n✨ プレミアムモデルの特徴：\n・より深い推論能力\n・より正確な回答\n・複雑な質問への対応\n\n💰 料金：月額1,000円\n※毎月自動更新されます\n※いつでも解約可能\n\n📋 解約方法：\nStripeの顧客ポータルから、いつでもサブスクリプションを解約できます。解約後も、現在の請求期間の終了まではプレミアムモデルをご利用いただけます。\n\n以下のリンクから決済を完了してください：\n${session.url}`,
                         },
                       ],
                     });
@@ -460,13 +460,10 @@ async function webhookHandler(event, context) {
               const remainingQuota = userStatus
                 ? messageLimit - userStatus.quota
                 : messageLimit;
-              if (userStatus && userStatus.quota < 50) {
-                if (userStatus.quota < 10) {
-                  // 緊急警告（10件未満）
-                  quotaWarning = `\n\n ---⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
-                } else {
-                  // 通常警告（50件未満）
-                  quotaWarning = `\n\n---📢 残り枠: ${remainingQuota}件`;
+              if (userStatus && remainingQuota <= 50) {
+                if (remainingQuota <= 10) {
+                  // 緊急警告（10件以下）
+                  quotaWarning = `\n\n⚠️ 残り枠: ${remainingQuota}件\n枠がなくなる前に追加購入をご検討ください。`;
                 }
               }
 
