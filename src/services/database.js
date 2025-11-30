@@ -507,27 +507,42 @@ async function updateSubscriptionStatus(
   try {
     const conn = await getConnection();
 
-    // ユーザー情報を取得
+    // ユーザー情報を取得（customer_idまたはsubscription_idで検索）
     const [rows] = await conn.execute(
-      "SELECT id FROM users WHERE stripe_customer_id = ?",
-      [customerId]
+      "SELECT id FROM users WHERE stripe_customer_id = ? OR stripe_subscription_id = ?",
+      [customerId, subscriptionId]
     );
 
     if (rows.length === 0) {
-      logger.warn(`User not found for customer ID: ${customerId}`);
+      logger.warn(
+        `User not found for customer ID: ${customerId}, subscription ID: ${subscriptionId}`
+      );
       return { success: false };
     }
 
     // サブスクリプションステータスを更新
     if (currentPeriodEnd) {
       await conn.execute(
-        "UPDATE users SET subscription_status = ?, subscription_current_period_end = ?, has_premium_model = ? WHERE stripe_customer_id = ?",
-        [status, currentPeriodEnd, status === "active" ? 1 : 0, customerId]
+        "UPDATE users SET subscription_status = ?, subscription_current_period_end = ?, has_premium_model = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?",
+        [
+          status,
+          currentPeriodEnd,
+          status === "active" ? 1 : 0,
+          customerId,
+          subscriptionId,
+          rows[0].id,
+        ]
       );
     } else {
       await conn.execute(
-        "UPDATE users SET subscription_status = ?, has_premium_model = ? WHERE stripe_customer_id = ?",
-        [status, status === "active" ? 1 : 0, customerId]
+        "UPDATE users SET subscription_status = ?, has_premium_model = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?",
+        [
+          status,
+          status === "active" ? 1 : 0,
+          customerId,
+          subscriptionId,
+          rows[0].id,
+        ]
       );
     }
 
@@ -551,10 +566,10 @@ async function deactivateSubscription(customerId, subscriptionId) {
   try {
     const conn = await getConnection();
 
-    // プレミアムモデルアクセスを無効化
+    // プレミアムモデルアクセスを無効化（customer_idまたはsubscription_idで検索）
     await conn.execute(
-      "UPDATE users SET has_premium_model = FALSE, subscription_status = 'canceled' WHERE stripe_customer_id = ?",
-      [customerId]
+      "UPDATE users SET has_premium_model = FALSE, subscription_status = 'canceled' WHERE stripe_customer_id = ? OR stripe_subscription_id = ?",
+      [customerId, subscriptionId]
     );
 
     logger.info(
