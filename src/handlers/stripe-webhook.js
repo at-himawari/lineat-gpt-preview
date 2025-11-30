@@ -9,12 +9,21 @@ const databaseService = require("../services/database");
  * 要件: 3.1, 3.2, 3.4
  */
 async function stripeWebhookHandler(event, context) {
+  // ヘッダーのキーを小文字に正規化
+  const headers = {};
+  if (event.headers) {
+    Object.keys(event.headers).forEach((key) => {
+      headers[key.toLowerCase()] = event.headers[key];
+    });
+  }
+
   logger.info("Stripe webhook called", {
     requestId: context.requestId,
     hasBody: !!event.body,
-    hasSignature: !!(
-      event.headers["stripe-signature"] || event.headers["Stripe-Signature"]
-    ),
+    hasSignature: !!headers["stripe-signature"],
+    isBase64Encoded: event.isBase64Encoded,
+    bodyType: typeof event.body,
+    headersKeys: Object.keys(headers),
   });
 
   try {
@@ -29,17 +38,19 @@ async function stripeWebhookHandler(event, context) {
     }
 
     // ボディの処理（Base64デコードが必要な場合）
+    // Stripeの署名検証には生のボディ文字列が必要
     let body = event.body;
     if (event.isBase64Encoded) {
       body = Buffer.from(body, "base64").toString("utf-8");
     }
 
-    // 署名ヘッダーの取得
-    const signature =
-      event.headers["stripe-signature"] || event.headers["Stripe-Signature"];
+    // 署名ヘッダーの取得（小文字で統一）
+    const signature = headers["stripe-signature"];
 
     if (!signature) {
-      logger.error("No Stripe signature header");
+      logger.error("No Stripe signature header", {
+        availableHeaders: Object.keys(headers),
+      });
       return {
         statusCode: 401,
         headers: { "Content-Type": "application/json" },
@@ -58,6 +69,14 @@ async function stripeWebhookHandler(event, context) {
       };
     }
 
+    logger.info("Attempting signature verification", {
+      bodyLength: body.length,
+      bodyPreview: body.substring(0, 100),
+      signaturePreview: signature.substring(0, 50),
+      webhookSecretPresent: !!webhookSecret,
+      webhookSecretPrefix: webhookSecret.substring(0, 10),
+    });
+
     // 署名検証
     let stripeEvent;
     try {
@@ -73,6 +92,9 @@ async function stripeWebhookHandler(event, context) {
     } catch (error) {
       logger.error("Webhook signature verification failed", {
         error: error.message,
+        errorStack: error.stack,
+        bodyLength: body.length,
+        signatureLength: signature.length,
       });
       return {
         statusCode: 401,
