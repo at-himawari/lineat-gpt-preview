@@ -457,19 +457,24 @@ async function processPaymentCompletion(
       );
       logger.info(`Quota extended for user: ${userId}`);
     } else if (productType === "model_upgrade") {
-      // プレミアムモデルを有効化（サブスクリプション情報も保存）
+      // サブスクリプション情報を保存（ステータスは後続のwebhookで更新される）
       if (customerId && subscriptionId) {
         await conn.execute(
-          "UPDATE users SET has_premium_model = TRUE, premium_activated_at = NOW(), stripe_customer_id = ?, stripe_subscription_id = ?, subscription_status = 'active' WHERE line_user_id = ?",
+          "UPDATE users SET stripe_customer_id = ?, stripe_subscription_id = ?, premium_activated_at = NOW() WHERE line_user_id = ?",
           [customerId, subscriptionId, userId]
         );
+        logger.info(
+          `Subscription info saved for user: ${userId}, will be activated by subscription webhook`
+        );
       } else {
+        logger.warn(
+          `Missing customerId or subscriptionId for model_upgrade: userId=${userId}`
+        );
         await conn.execute(
-          "UPDATE users SET has_premium_model = TRUE, premium_activated_at = NOW() WHERE line_user_id = ?",
+          "UPDATE users SET premium_activated_at = NOW() WHERE line_user_id = ?",
           [userId]
         );
       }
-      logger.info(`Premium model activated for user: ${userId}`);
     } else {
       await conn.rollback();
       throw new Error(`Unknown product type: ${productType}`);
@@ -507,49 +512,75 @@ async function updateSubscriptionStatus(
   try {
     const conn = await getConnection();
 
+    logger.info("updateSubscriptionStatus called", {
+      customerId,
+      subscriptionId,
+      status,
+      currentPeriodEnd,
+    });
+
     // ユーザー情報を取得（customer_idまたはsubscription_idで検索）
     const [rows] = await conn.execute(
-      "SELECT id FROM users WHERE stripe_customer_id = ? OR stripe_subscription_id = ?",
+      "SELECT id, line_user_id, stripe_customer_id, stripe_subscription_id FROM users WHERE stripe_customer_id = ? OR stripe_subscription_id = ?",
       [customerId, subscriptionId]
     );
+
+    logger.info("User search result", {
+      foundUsers: rows.length,
+      users: rows,
+    });
 
     if (rows.length === 0) {
       logger.warn(
         `User not found for customer ID: ${customerId}, subscription ID: ${subscriptionId}`
       );
-      return { success: false };
+      return { success: false, reason: "user_not_found" };
     }
+
+    const userId = rows[0].id;
+    const hasPremiumValue = status === "active" ? 1 : 0;
 
     // サブスクリプションステータスを更新
     if (currentPeriodEnd) {
-      await conn.execute(
+      const [updateResult] = await conn.execute(
         "UPDATE users SET subscription_status = ?, subscription_current_period_end = ?, has_premium_model = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?",
         [
           status,
           currentPeriodEnd,
-          status === "active" ? 1 : 0,
+          hasPremiumValue,
           customerId,
           subscriptionId,
-          rows[0].id,
+          userId,
         ]
       );
+      logger.info("Update with period end executed", {
+        affectedRows: updateResult.affectedRows,
+        changedRows: updateResult.changedRows,
+      });
     } else {
-      await conn.execute(
+      const [updateResult] = await conn.execute(
         "UPDATE users SET subscription_status = ?, has_premium_model = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?",
-        [
-          status,
-          status === "active" ? 1 : 0,
-          customerId,
-          subscriptionId,
-          rows[0].id,
-        ]
+        [status, hasPremiumValue, customerId, subscriptionId, userId]
       );
+      logger.info("Update without period end executed", {
+        affectedRows: updateResult.affectedRows,
+        changedRows: updateResult.changedRows,
+      });
     }
 
-    logger.info(
-      `Subscription status updated: customerId=${customerId}, subscriptionId=${subscriptionId}, status=${status}`
+    // 更新後のユーザー情報を確認
+    const [verifyRows] = await conn.execute(
+      "SELECT line_user_id, has_premium_model, subscription_status, stripe_customer_id, stripe_subscription_id FROM users WHERE id = ?",
+      [userId]
     );
-    return { success: true };
+
+    logger.info(
+      `Subscription status updated: customerId=${customerId}, subscriptionId=${subscriptionId}, status=${status}`,
+      {
+        updatedUser: verifyRows[0],
+      }
+    );
+    return { success: true, updatedUser: verifyRows[0] };
   } catch (error) {
     logger.error("Database error in updateSubscriptionStatus:", error);
     throw error;

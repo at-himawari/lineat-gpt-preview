@@ -304,10 +304,11 @@ async function handleSubscriptionCreated(subscription, databaseService) {
       customerId,
       status,
       currentPeriodEnd,
+      subscriptionObject: JSON.stringify(subscription),
     });
 
     // サブスクリプション情報を更新
-    await databaseService.updateSubscriptionStatus(
+    const result = await databaseService.updateSubscriptionStatus(
       customerId,
       subscriptionId,
       status,
@@ -317,6 +318,7 @@ async function handleSubscriptionCreated(subscription, databaseService) {
     logger.info("Subscription created processing completed", {
       subscriptionId,
       customerId,
+      updateResult: result,
     });
   } catch (error) {
     logger.error("Error processing subscription created", {
@@ -340,10 +342,11 @@ async function handleSubscriptionUpdated(subscription, databaseService) {
       customerId,
       status,
       currentPeriodEnd,
+      subscriptionObject: JSON.stringify(subscription),
     });
 
     // サブスクリプション情報を更新
-    await databaseService.updateSubscriptionStatus(
+    const result = await databaseService.updateSubscriptionStatus(
       customerId,
       subscriptionId,
       status,
@@ -353,6 +356,7 @@ async function handleSubscriptionUpdated(subscription, databaseService) {
     logger.info("Subscription updated processing completed", {
       subscriptionId,
       customerId,
+      updateResult: result,
     });
   } catch (error) {
     logger.error("Error processing subscription updated", {
