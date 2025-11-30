@@ -64,3 +64,5 @@ jspm_packages/
 Thumbs.db
 
 cdk.out/
+.env.prod
+.env.test

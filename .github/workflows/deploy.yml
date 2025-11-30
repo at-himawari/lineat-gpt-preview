@@ -12,13 +12,14 @@ on:
         required: true
         type: choice
         options:
-          - dev
+          - test
           - prod
-        default: dev
+        default: test
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'test') }}
 
     permissions:
       id-token: write
@@ -27,17 +28,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Determine environment
-        id: env
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "environment=prod" >> $GITHUB_OUTPUT
-          else
-            echo "environment=dev" >> $GITHUB_OUTPUT
-          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -62,11 +52,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-1
 
-      - name: CDK Deploy (Dev)
-        if: steps.env.outputs.environment == 'dev'
+      - name: CDK Deploy (Test)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test' || github.ref != 'refs/heads/main'
         run: npm run deploy:dev -- --require-approval never
         env:
-          ENVIRONMENT: dev
+          ENVIRONMENT: test
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -89,7 +79,7 @@ jobs:
           STRIPE_CANCEL_URL: ${{ secrets.STRIPE_CANCEL_URL }}
 
       - name: CDK Deploy (Prod)
-        if: steps.env.outputs.environment == 'prod'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' || github.ref == 'refs/heads/main'
         run: npm run deploy:prod -- --require-approval never
         env:
           ENVIRONMENT: prod

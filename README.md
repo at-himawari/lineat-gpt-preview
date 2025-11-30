@@ -84,18 +84,18 @@ npx cdk bootstrap
 
 ### 3. 環境変数の設定
 
-このプロジェクトは**テスト環境（dev）**と**本番環境（prod）**を分けてデプロイできます。
+このプロジェクトは**テスト環境（test）**と**本番環境（prod）**を分けてデプロイできます。
 
 #### 環境別の設定ファイル
 
-- `.env.dev` - テスト環境用の設定
+- `.env.test` - テスト環境用の設定
 - `.env.prod` - 本番環境用の設定
 
-サンプルファイル（`.env.dev.example`、`.env.prod.example`）をコピーして使用してください：
+サンプルファイル（`.env.test.example`、`.env.prod.example`）をコピーして使用してください：
 
 ```bash
 # テスト環境用
-cp .env.dev.example .env.dev
+cp .env.test.example .env.test
 
 # 本番環境用
 cp .env.prod.example .env.prod
@@ -163,7 +163,7 @@ SKIP_SIGNATURE_VALIDATION=false
 
 ```bash
 # テスト環境
-./database/setup_dev.sh
+./database/setup_test.sh
 
 # 本番環境
 ./database/setup_prod.sh
@@ -175,8 +175,8 @@ SKIP_SIGNATURE_VALIDATION=false
 
 ```bash
 # テスト環境用
-mysql -h your_dev_mysql_host -u root -p
-CREATE DATABASE line_chatbot_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+mysql -h your_test_mysql_host -u root -p
+CREATE DATABASE line_chatbot_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 # 本番環境用
 mysql -h your_prod_mysql_host -u root -p
@@ -187,10 +187,10 @@ CREATE DATABASE line_chatbot_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_
 
 ```bash
 # テスト環境
-mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/schema.sql
-mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_stripe_billing.sql
-mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_subscription_support.sql
-mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_message_limit.sql
+mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/schema.sql
+mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_stripe_billing.sql
+mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_subscription_support.sql
+mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_message_limit.sql
 
 # 本番環境
 mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/schema.sql
@@ -207,19 +207,19 @@ mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migra
 
 ```bash
 # CloudFormationテンプレートの確認
-npm run synth:dev
+npm run synth:test
 
 # 差分確認
-npm run diff:dev
+npm run diff:test
 
 # デプロイ実行
-npm run deploy:dev
+npm run deploy:test
 ```
 
 または、デプロイスクリプトを使用：
 
 ```bash
-./deploy.sh dev
+./deploy.sh test
 ```
 
 #### 本番環境へのデプロイ
@@ -241,7 +241,7 @@ npm run deploy:prod
 ./deploy.sh prod
 ```
 
-**注意**: テスト環境と本番環境は別々のスタック（`LineChatbotStack-dev`、`LineChatbotStack-prod`）として作成されます。
+**注意**: テスト環境と本番環境は別々のスタック（`LineChatbotStack-test`、`LineChatbotStack-prod`）として作成されます。
 
 ### 6. Stripe Webhook の設定
 
@@ -423,13 +423,13 @@ Bot: テキストメッセージでお話しいただけると嬉しいです！
 npm run build      # TypeScriptコンパイル
 ```
 
-### テスト環境（dev）
+### テスト環境（test）
 
 ```bash
-npm run synth:dev   # CloudFormationテンプレート生成
-npm run diff:dev    # 現在のスタックとの差分表示
-npm run deploy:dev  # スタックデプロイ
-npm run destroy:dev # スタック削除
+npm run synth:test   # CloudFormationテンプレート生成
+npm run diff:test    # 現在のスタックとの差分表示
+npm run deploy:test  # スタックデプロイ
+npm run destroy:test # スタック削除
 ```
 
 ### 本番環境（prod）
@@ -444,7 +444,7 @@ npm run destroy:prod # スタック削除
 ### デプロイスクリプト
 
 ```bash
-./deploy.sh dev   # テスト環境へデプロイ
+./deploy.sh test  # テスト環境へデプロイ
 ./deploy.sh prod  # 本番環境へデプロイ
 ```
 
@@ -454,7 +454,7 @@ GitHub Actions を使用した環境別の自動デプロイが設定されて�
 
 ### デプロイフロー
 
-- **develop ブランチ**: テスト環境（dev）に自動デプロイ
+- **develop ブランチ**: テスト環境（test）に自動デプロイ
 - **main ブランチ**: 本番環境（prod）に自動デプロイ
 - **手動実行**: 任意の環境を選択してデプロイ可能
 
@@ -506,53 +506,59 @@ aws iam attach-role-policy \
   --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
 ```
 
-2. **GitHub Secrets の設定**
+2. **GitHub Environments の設定**
 
-リポジトリの Settings → Secrets and variables → Actions で以下のシークレットを追加：
+リポジトリの Settings → Environments で `test` と `prod` の Environment を作成し、それぞれに以下のシークレットを設定：
 
-#### 共通設定
+#### 共通設定（Repository secrets）
 
 - `AWS_ROLE_ARN`: 作成した IAM ロールの ARN（例: `arn:aws:iam::123456789012:role/GitHubActionsDeployRole`）
+
+#### テスト環境（test）用 Environment secrets
+
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（テスト用）
+- `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（テスト用）
 - `GEMINI_API_KEY`: Google Gemini API キー
 - `GEMINI_BASIC_MODEL`: 基本 Gemini モデル名（例: `gemini-2.0-flash-exp`）
 - `GEMINI_PREMIUM_MODEL`: プレミアム Gemini モデル名（例: `gemini-2.0-flash-thinking-exp-01-21`）
 - `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
 - `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
 - `GEMINI_RESPONSE_CHAR_LIMIT`: 応答の文字数制限（デフォルト: 500）
+- `DB_HOST`: MySQL ホスト（テスト用）
+- `DB_USER`: MySQL ユーザー（テスト用）
+- `DB_PASSWORD`: MySQL パスワード（テスト用）
+- `DB_NAME`: MySQL データベース名（テスト用）
+- `STRIPE_SECRET_KEY`: Stripe シークレットキー（テストモード: `sk_test_`）
+- `STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（テストモード）
+- `STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（テストモード）
+- `STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（テストモード）
+- `STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（テストモード）
+- `STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（テスト用）
+- `STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（テスト用）
+- `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（テスト用: `true`）
 
-#### テスト環境（dev）用
+#### 本番環境（prod）用 Environment secrets
 
-- `DEV_LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（テスト用）
-- `DEV_LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（テスト用）
-- `DEV_DB_HOST`: MySQL ホスト（テスト用）
-- `DEV_DB_USER`: MySQL ユーザー（テスト用）
-- `DEV_DB_PASSWORD`: MySQL パスワード（テスト用）
-- `DEV_DB_NAME`: MySQL データベース名（テスト用）
-- `DEV_STRIPE_SECRET_KEY`: Stripe シークレットキー（テストモード: `sk_test_`）
-- `DEV_STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（テストモード）
-- `DEV_STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（テストモード）
-- `DEV_STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（テストモード）
-- `DEV_STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（テストモード）
-- `DEV_STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（テスト用）
-- `DEV_STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（テスト用）
-- `DEV_SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（テスト用: `true`）
-
-#### 本番環境（prod）用
-
-- `PROD_LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（本番用）
-- `PROD_LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（本番用）
-- `PROD_DB_HOST`: MySQL ホスト（本番用）
-- `PROD_DB_USER`: MySQL ユーザー（本番用）
-- `PROD_DB_PASSWORD`: MySQL パスワード（本番用）
-- `PROD_DB_NAME`: MySQL データベース名（本番用）
-- `PROD_STRIPE_SECRET_KEY`: Stripe シークレットキー（本番モード: `sk_live_`）
-- `PROD_STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（本番モード）
-- `PROD_STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（本番モード）
-- `PROD_STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（本番モード）
-- `PROD_STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（本番モード）
-- `PROD_STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（本番用）
-- `PROD_STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（本番用）
-- `PROD_SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（本番用: `false`）
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（本番用）
+- `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（本番用）
+- `GEMINI_API_KEY`: Google Gemini API キー
+- `GEMINI_BASIC_MODEL`: 基本 Gemini モデル名（例: `gemini-2.0-flash-exp`）
+- `GEMINI_PREMIUM_MODEL`: プレミアム Gemini モデル名（例: `gemini-2.0-flash-thinking-exp-01-21`）
+- `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
+- `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
+- `GEMINI_RESPONSE_CHAR_LIMIT`: 応答の文字数制限（デフォルト: 500）
+- `DB_HOST`: MySQL ホスト（本番用）
+- `DB_USER`: MySQL ユーザー（本番用）
+- `DB_PASSWORD`: MySQL パスワード（本番用）
+- `DB_NAME`: MySQL データベース名（本番用）
+- `STRIPE_SECRET_KEY`: Stripe シークレットキー（本番モード: `sk_live_`）
+- `STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（本番モード）
+- `STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（本番モード）
+- `STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（本番モード）
+- `STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（本番モード）
+- `STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（本番用）
+- `STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（本番用）
+- `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（本番用: `false`）
 
 3. **自動デプロイ**
 
@@ -579,7 +585,7 @@ git push origin main
 
 4. **手動デプロイ**
 
-GitHub の Actions タブから "Deploy to AWS" ワークフローを手動実行し、デプロイ先の環境（dev/prod）を選択できます。
+GitHub の Actions タブから "Deploy to AWS" ワークフローを手動実行し、デプロイ先の環境（test/prod）を選択できます。
 
 ## ローカル開発
 
