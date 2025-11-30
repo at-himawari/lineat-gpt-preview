@@ -354,11 +354,11 @@ async function webhookHandler(event, context) {
                 if (trimmedMessage === "料金") {
                   try {
                     const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_3DAYS || "300",
+                      process.env.MESSAGE_LIMIT_1DAY || "30",
                       10
                     );
                     const quotaExtension = parseInt(
-                      process.env.MESSAGE_QUOTA_EXTENSION || "300",
+                      process.env.MESSAGE_QUOTA_EXTENSION || "30",
                       10
                     );
                     userStatus = await getUserModelStatus(userId);
@@ -376,7 +376,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・300円（買い切り）\n・${quotaExtension}件のメッセージ追加\n・3日間の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,400円（サブスクリプション）\n・より高度なAIモデル\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${remainingQuota}件`,
+                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・300円（買い切り）\n・${quotaExtension}件のメッセージ追加\n・1日の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,400円（サブスクリプション）\n・より高度なAIモデル\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${remainingQuota}件`,
                         },
                       ],
                     });
@@ -402,7 +402,7 @@ async function webhookHandler(event, context) {
                 if (trimmedMessage === "枠") {
                   try {
                     const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_3DAYS || "300",
+                      process.env.MESSAGE_LIMIT_1DAY || "30",
                       10
                     );
                     userStatus = await getUserModelStatus(userId);
@@ -410,8 +410,8 @@ async function webhookHandler(event, context) {
 
                     const resetDate = new Date(userStatus.resetAt);
                     const now = new Date();
-                    const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
-                    const timeUntilReset = threeDaysInMs - (now - resetDate);
+                    const oneDayInMs = 24 * 60 * 60 * 1000;
+                    const timeUntilReset = oneDayInMs - (now - resetDate);
                     const hoursUntilReset = Math.floor(
                       timeUntilReset / (1000 * 60 * 60)
                     );
@@ -455,11 +455,11 @@ async function webhookHandler(event, context) {
                       createCheckoutSession,
                     } = require("../services/stripe");
                     const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_3DAYS || "300",
+                      process.env.MESSAGE_LIMIT_1DAY || "30",
                       10
                     );
                     const quotaExtension = parseInt(
-                      process.env.MESSAGE_QUOTA_EXTENSION || "300",
+                      process.env.MESSAGE_QUOTA_EXTENSION || "30",
                       10
                     );
 
@@ -474,7 +474,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `申し訳ございません。3日間で${messageLimit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
+                          text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
                         },
                       ],
                     });
@@ -483,7 +483,7 @@ async function webhookHandler(event, context) {
                       error: error.message,
                     });
                     const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_3DAYS || "300",
+                      process.env.MESSAGE_LIMIT_1DAY || "30",
                       10
                     );
                     await client.replyMessage({
@@ -491,7 +491,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `申し訳ございません。3日間で${messageLimit}通のメッセージ制限に達しました。決済リンクの生成に失敗しました。しばらく時間をおいてから再度お試しください。`,
+                          text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。決済リンクの生成に失敗しました。しばらく時間をおいてから再度お試しください。`,
                         },
                       ],
                     });
@@ -543,7 +543,7 @@ async function webhookHandler(event, context) {
               // 残り枠警告メッセージの追加
               let quotaWarning = "";
               const messageLimit = parseInt(
-                process.env.MESSAGE_LIMIT_3DAYS || "300",
+                process.env.MESSAGE_LIMIT_1DAY || "30",
                 10
               );
               const remainingQuota = userStatus

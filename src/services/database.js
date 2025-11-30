@@ -68,10 +68,10 @@ async function checkAndUpdateMessageLimit(userId) {
     const user = rows[0];
     const now = new Date();
     const resetTime = new Date(user.count_reset_at);
-    const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+    const oneDayInMs = 24 * 60 * 60 * 1000;
 
-    // 3日経過していればカウントをリセット
-    if (now - resetTime >= threeDaysInMs) {
+    // 1日経過していればカウントをリセット
+    if (now - resetTime >= oneDayInMs) {
       await conn.execute(
         "UPDATE users SET message_count_3days = 1, count_reset_at = NOW() WHERE line_user_id = ?",
         [userId]
@@ -81,7 +81,7 @@ async function checkAndUpdateMessageLimit(userId) {
     }
 
     // メッセージ制限をチェック
-    const messageLimit = parseInt(process.env.MESSAGE_LIMIT_3DAYS || "300", 10);
+    const messageLimit = parseInt(process.env.MESSAGE_LIMIT_1DAY || "30", 10);
     if (user.message_count_3days >= messageLimit) {
       logger.warn(`Message limit reached for user: ${userId}`);
       return { allowed: false, count: user.message_count_3days };
@@ -448,7 +448,7 @@ async function processPaymentCompletion(
     if (productType === "quota_extension") {
       // 枠を追加（使用回数を減らす = 残り回数を増やす）
       const quotaExtension = parseInt(
-        process.env.MESSAGE_QUOTA_EXTENSION || "300",
+        process.env.MESSAGE_QUOTA_EXTENSION || "30",
         10
       );
       await conn.execute(
