@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 環境を引数から取得（デフォルトはdev）
-ENVIRONMENT=${1:-dev}
+ENVIRONMENT=${1:-test}
 
 echo "Deploying to environment: $ENVIRONMENT"
 
