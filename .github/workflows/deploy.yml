@@ -4,7 +4,17 @@ on:
   push:
     branches:
       - main
+      - develop
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
 
 jobs:
   deploy:
@@ -17,6 +27,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -41,26 +62,54 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-1
 
-      - name: CDK Deploy
-        run: npm run deploy -- --require-approval never
+      - name: CDK Deploy (Dev)
+        if: steps.env.outputs.environment == 'dev'
+        run: npm run deploy:dev -- --require-approval never
         env:
-          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+          ENVIRONMENT: dev
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.DEV_LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_CHANNEL_SECRET: ${{ secrets.DEV_LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_BASIC_MODEL: ${{ secrets.GEMINI_BASIC_MODEL }}
           GEMINI_PREMIUM_MODEL: ${{ secrets.GEMINI_PREMIUM_MODEL }}
           GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
           GEMINI_TEMPERATURE: ${{ secrets.GEMINI_TEMPERATURE }}
           GEMINI_RESPONSE_CHAR_LIMIT: ${{ secrets.GEMINI_RESPONSE_CHAR_LIMIT }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          SKIP_SIGNATURE_VALIDATION: ${{ secrets.SKIP_SIGNATURE_VALIDATION }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_QUOTA_PRICE_ID: ${{ secrets.STRIPE_QUOTA_PRICE_ID }}
-          STRIPE_PREMIUM_PRICE_ID: ${{ secrets.STRIPE_PREMIUM_PRICE_ID }}
-          STRIPE_SUCCESS_URL: ${{ secrets.STRIPE_SUCCESS_URL }}
-          STRIPE_CANCEL_URL: ${{ secrets.STRIPE_CANCEL_URL }}
+          DB_HOST: ${{ secrets.DEV_DB_HOST }}
+          DB_USER: ${{ secrets.DEV_DB_USER }}
+          DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DEV_DB_NAME }}
+          SKIP_SIGNATURE_VALIDATION: ${{ secrets.DEV_SKIP_SIGNATURE_VALIDATION }}
+          STRIPE_SECRET_KEY: ${{ secrets.DEV_STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.DEV_STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.DEV_STRIPE_WEBHOOK_SECRET }}
+          STRIPE_QUOTA_PRICE_ID: ${{ secrets.DEV_STRIPE_QUOTA_PRICE_ID }}
+          STRIPE_PREMIUM_PRICE_ID: ${{ secrets.DEV_STRIPE_PREMIUM_PRICE_ID }}
+          STRIPE_SUCCESS_URL: ${{ secrets.DEV_STRIPE_SUCCESS_URL }}
+          STRIPE_CANCEL_URL: ${{ secrets.DEV_STRIPE_CANCEL_URL }}
+
+      - name: CDK Deploy (Prod)
+        if: steps.env.outputs.environment == 'prod'
+        run: npm run deploy:prod -- --require-approval never
+        env:
+          ENVIRONMENT: prod
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.PROD_LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_CHANNEL_SECRET: ${{ secrets.PROD_LINE_CHANNEL_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_BASIC_MODEL: ${{ secrets.GEMINI_BASIC_MODEL }}
+          GEMINI_PREMIUM_MODEL: ${{ secrets.GEMINI_PREMIUM_MODEL }}
+          GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
+          GEMINI_TEMPERATURE: ${{ secrets.GEMINI_TEMPERATURE }}
+          GEMINI_RESPONSE_CHAR_LIMIT: ${{ secrets.GEMINI_RESPONSE_CHAR_LIMIT }}
+          DB_HOST: ${{ secrets.PROD_DB_HOST }}
+          DB_USER: ${{ secrets.PROD_DB_USER }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          DB_NAME: ${{ secrets.PROD_DB_NAME }}
+          SKIP_SIGNATURE_VALIDATION: ${{ secrets.PROD_SKIP_SIGNATURE_VALIDATION }}
+          STRIPE_SECRET_KEY: ${{ secrets.PROD_STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.PROD_STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.PROD_STRIPE_WEBHOOK_SECRET }}
+          STRIPE_QUOTA_PRICE_ID: ${{ secrets.PROD_STRIPE_QUOTA_PRICE_ID }}
+          STRIPE_PREMIUM_PRICE_ID: ${{ secrets.PROD_STRIPE_PREMIUM_PRICE_ID }}
+          STRIPE_SUCCESS_URL: ${{ secrets.PROD_STRIPE_SUCCESS_URL }}
+          STRIPE_CANCEL_URL: ${{ secrets.PROD_STRIPE_CANCEL_URL }}

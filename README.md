@@ -84,6 +84,25 @@ npx cdk bootstrap
 
 ### 3. 環境変数の設定
 
+このプロジェクトは**テスト環境（dev）**と**本番環境（prod）**を分けてデプロイできます。
+
+#### 環境別の設定ファイル
+
+- `.env.dev` - テスト環境用の設定
+- `.env.prod` - 本番環境用の設定
+
+サンプルファイル（`.env.dev.example`、`.env.prod.example`）をコピーして使用してください：
+
+```bash
+# テスト環境用
+cp .env.dev.example .env.dev
+
+# 本番環境用
+cp .env.prod.example .env.prod
+```
+
+#### 環境変数の設定
+
 `.env`ファイルを編集して、実際の認証情報を設定してください：
 
 ```bash
@@ -153,16 +172,45 @@ mysql -u your_user -p your_database < database/migration_add_message_limit.sql
 
 ### 5. デプロイ
 
+#### テスト環境へのデプロイ
+
 ```bash
 # CloudFormationテンプレートの確認
-npm run synth
+npm run synth:dev
 
 # 差分確認
-npm run diff
+npm run diff:dev
 
 # デプロイ実行
-npm run deploy
+npm run deploy:dev
 ```
+
+または、デプロイスクリプトを使用：
+
+```bash
+./deploy.sh dev
+```
+
+#### 本番環境へのデプロイ
+
+```bash
+# CloudFormationテンプレートの確認
+npm run synth:prod
+
+# 差分確認
+npm run diff:prod
+
+# デプロイ実行
+npm run deploy:prod
+```
+
+または、デプロイスクリプトを使用：
+
+```bash
+./deploy.sh prod
+```
+
+**注意**: テスト環境と本番環境は別々のスタック（`LineChatbotStack-dev`、`LineChatbotStack-prod`）として作成されます。
 
 ### 6. Stripe Webhook の設定
 
@@ -338,17 +386,46 @@ Bot: テキストメッセージでお話しいただけると嬉しいです！
 
 ## CDK コマンド
 
+### 基本コマンド
+
 ```bash
 npm run build      # TypeScriptコンパイル
-npm run synth      # CloudFormationテンプレート生成
-npm run diff       # 現在のスタックとの差分表示
-npm run deploy     # スタックデプロイ
-npm run destroy    # スタック削除
+```
+
+### テスト環境（dev）
+
+```bash
+npm run synth:dev   # CloudFormationテンプレート生成
+npm run diff:dev    # 現在のスタックとの差分表示
+npm run deploy:dev  # スタックデプロイ
+npm run destroy:dev # スタック削除
+```
+
+### 本番環境（prod）
+
+```bash
+npm run synth:prod   # CloudFormationテンプレート生成
+npm run diff:prod    # 現在のスタックとの差分表示
+npm run deploy:prod  # スタックデプロイ
+npm run destroy:prod # スタック削除
+```
+
+### デプロイスクリプト
+
+```bash
+./deploy.sh dev   # テスト環境へデプロイ
+./deploy.sh prod  # 本番環境へデプロイ
 ```
 
 ## CI/CD
 
-GitHub Actions を使用した自動デプロイが設定されています。
+GitHub Actions を使用した環境別の自動デプロイが設定されています。
+
+### デプロイフロー
+
+- **develop ブランチ**: テスト環境（dev）に自動デプロイ
+- **main ブランチ**: 本番環境（prod）に自動デプロイ
+- **手動実行**: 任意の環境を選択してデプロイ可能
 
 ### セットアップ手順
 
@@ -402,39 +479,76 @@ aws iam attach-role-policy \
 
 リポジトリの Settings → Secrets and variables → Actions で以下のシークレットを追加：
 
+#### 共通設定
+
 - `AWS_ROLE_ARN`: 作成した IAM ロールの ARN（例: `arn:aws:iam::123456789012:role/GitHubActionsDeployRole`）
-- `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン
-- `LINE_CHANNEL_SECRET`: LINE チャンネルシークレット
 - `GEMINI_API_KEY`: Google Gemini API キー
 - `GEMINI_BASIC_MODEL`: 基本 Gemini モデル名（例: `gemini-2.0-flash-exp`）
 - `GEMINI_PREMIUM_MODEL`: プレミアム Gemini モデル名（例: `gemini-2.0-flash-thinking-exp-01-21`）
 - `GEMINI_MAX_TOKENS`: 最大出力トークン数（デフォルト: 8000）
 - `GEMINI_TEMPERATURE`: 生成温度（デフォルト: 1）
 - `GEMINI_RESPONSE_CHAR_LIMIT`: 応答の文字数制限（デフォルト: 500）
-- `DB_HOST`: MySQL ホスト
-- `DB_USER`: MySQL ユーザー
-- `DB_PASSWORD`: MySQL パスワード
-- `DB_NAME`: MySQL データベース名
-- `STRIPE_SECRET_KEY`: Stripe シークレットキー
-- `STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー
-- `STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット
-- `STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID
-- `STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID
-- `STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL
-- `STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL
-- `SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（通常は `false`）
 
-3. **デプロイ**
+#### テスト環境（dev）用
 
-`main` ブランチにプッシュすると自動的にデプロイされます：
+- `DEV_LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（テスト用）
+- `DEV_LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（テスト用）
+- `DEV_DB_HOST`: MySQL ホスト（テスト用）
+- `DEV_DB_USER`: MySQL ユーザー（テスト用）
+- `DEV_DB_PASSWORD`: MySQL パスワード（テスト用）
+- `DEV_DB_NAME`: MySQL データベース名（テスト用）
+- `DEV_STRIPE_SECRET_KEY`: Stripe シークレットキー（テストモード: `sk_test_`）
+- `DEV_STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（テストモード）
+- `DEV_STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（テストモード）
+- `DEV_STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（テストモード）
+- `DEV_STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（テストモード）
+- `DEV_STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（テスト用）
+- `DEV_STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（テスト用）
+- `DEV_SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（テスト用: `true`）
+
+#### 本番環境（prod）用
+
+- `PROD_LINE_CHANNEL_ACCESS_TOKEN`: LINE チャンネルアクセストークン（本番用）
+- `PROD_LINE_CHANNEL_SECRET`: LINE チャンネルシークレット（本番用）
+- `PROD_DB_HOST`: MySQL ホスト（本番用）
+- `PROD_DB_USER`: MySQL ユーザー（本番用）
+- `PROD_DB_PASSWORD`: MySQL パスワード（本番用）
+- `PROD_DB_NAME`: MySQL データベース名（本番用）
+- `PROD_STRIPE_SECRET_KEY`: Stripe シークレットキー（本番モード: `sk_live_`）
+- `PROD_STRIPE_PUBLISHABLE_KEY`: Stripe パブリッシャブルキー（本番モード）
+- `PROD_STRIPE_WEBHOOK_SECRET`: Stripe Webhook シークレット（本番モード）
+- `PROD_STRIPE_QUOTA_PRICE_ID`: メッセージ枠拡張の Price ID（本番モード）
+- `PROD_STRIPE_PREMIUM_PRICE_ID`: プレミアムモデルの Price ID（本番モード）
+- `PROD_STRIPE_SUCCESS_URL`: 決済成功時のリダイレクト URL（本番用）
+- `PROD_STRIPE_CANCEL_URL`: 決済キャンセル時のリダイレクト URL（本番用）
+- `PROD_SKIP_SIGNATURE_VALIDATION`: 署名検証スキップフラグ（本番用: `false`）
+
+3. **自動デプロイ**
+
+#### テスト環境へのデプロイ
+
+`develop` ブランチにプッシュすると自動的にテスト環境にデプロイされます：
 
 ```bash
+git checkout develop
 git add .
-git commit -m "Deploy to AWS"
+git commit -m "Deploy to dev environment"
+git push origin develop
+```
+
+#### 本番環境へのデプロイ
+
+`main` ブランチにプッシュすると自動的に本番環境にデプロイされます：
+
+```bash
+git checkout main
+git merge develop
 git push origin main
 ```
 
-手動でデプロイする場合は、GitHub の Actions タブから "Deploy to AWS" ワークフローを実行できます。
+4. **手動デプロイ**
+
+GitHub の Actions タブから "Deploy to AWS" ワークフローを手動実行し、デプロイ先の環境（dev/prod）を選択できます。
 
 ## ローカル開発
 

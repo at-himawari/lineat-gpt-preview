@@ -6,9 +6,17 @@
   "scripts": {
     "build": "tsc",
     "deploy": "cdk deploy",
+    "deploy:dev": "ENVIRONMENT=dev cdk deploy LineChatbotStack-dev",
+    "deploy:prod": "ENVIRONMENT=prod cdk deploy LineChatbotStack-prod",
     "synth": "cdk synth",
+    "synth:dev": "ENVIRONMENT=dev cdk synth LineChatbotStack-dev",
+    "synth:prod": "ENVIRONMENT=prod cdk synth LineChatbotStack-prod",
     "diff": "cdk diff",
+    "diff:dev": "ENVIRONMENT=dev cdk diff LineChatbotStack-dev",
+    "diff:prod": "ENVIRONMENT=prod cdk diff LineChatbotStack-prod",
     "destroy": "cdk destroy",
+    "destroy:dev": "ENVIRONMENT=dev cdk destroy LineChatbotStack-dev",
+    "destroy:prod": "ENVIRONMENT=prod cdk destroy LineChatbotStack-prod",
     "local": "sam local start-api -t cdk.out/LineChatbotStack.template.json"
   },
   "dependencies": {

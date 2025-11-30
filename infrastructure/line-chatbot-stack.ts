@@ -6,9 +6,15 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import * as path from "path";
 
+interface LineChatbotStackProps extends cdk.StackProps {
+  environment: string;
+}
+
 export class LineChatbotStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: LineChatbotStackProps) {
     super(scope, id, props);
+
+    const env = props.environment;
 
     // Lambda実行ロール
     const lambdaRole = new iam.Role(this, "LineChatbotLambdaRole", {
@@ -22,7 +28,7 @@ export class LineChatbotStack extends cdk.Stack {
 
     // CloudWatch Logsグループ
     const logGroup = new logs.LogGroup(this, "LineChatbotLogGroup", {
-      logGroupName: "/aws/lambda/line-chatbot-webhook",
+      logGroupName: `/aws/lambda/line-chatbot-webhook-${env}`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -67,7 +73,7 @@ export class LineChatbotStack extends cdk.Stack {
 
     // CloudWatch Logsグループ（Stripe Webhook用）
     const stripeLogGroup = new logs.LogGroup(this, "StripeWebhookLogGroup", {
-      logGroupName: "/aws/lambda/stripe-webhook-handler",
+      logGroupName: `/aws/lambda/stripe-webhook-handler-${env}`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -97,8 +103,8 @@ export class LineChatbotStack extends cdk.Stack {
 
     // API Gateway
     const api = new apigateway.RestApi(this, "LineChatbotApi", {
-      restApiName: "LINE Chatbot API",
-      description: "API for LINE Chatbot with Google Gemini",
+      restApiName: `LINE Chatbot API (${env})`,
+      description: `API for LINE Chatbot with Google Gemini - ${env} environment`,
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
