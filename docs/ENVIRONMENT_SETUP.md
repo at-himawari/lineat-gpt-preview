@@ -63,7 +63,7 @@ STRIPE_PREMIUM_PRICE_ID=price_test_...
 
 # MySQL設定（テスト用データベース）
 DB_HOST=your_dev_mysql_host
-DB_NAME=your_dev_database_name
+DB_NAME=lineat_gpt_test
 
 # デバッグ設定（署名検証をスキップ可能）
 SKIP_SIGNATURE_VALIDATION=true
@@ -84,7 +84,7 @@ STRIPE_PREMIUM_PRICE_ID=price_live_...
 
 # MySQL設定（本番用データベース）
 DB_HOST=your_prod_mysql_host
-DB_NAME=your_prod_database_name
+DB_NAME=lineat_gpt_prod
 
 # デバッグ設定（本番では必ずfalse）
 SKIP_SIGNATURE_VALIDATION=false
@@ -92,19 +92,50 @@ SKIP_SIGNATURE_VALIDATION=false
 
 ### 3. データベースの準備
 
-各環境用のデータベースを作成し、スキーマを適用します：
+各環境用のデータベースを作成し、スキーマを適用します。
+
+#### データベースの作成
+
+**推奨構成**: テスト環境と本番環境で異なるデータベースを使用
+
+| 環境   | データベース名      | 推奨ホスト         |
+| ------ | ------------------- | ------------------ |
+| テスト | `line_chatbot_dev`  | 開発用 DB サーバー |
+| 本番   | `line_chatbot_prod` | 本番用 DB サーバー |
 
 ```bash
-# テスト環境用データベース
-mysql -u your_user -p your_dev_database < database/schema.sql
-mysql -u your_user -p your_dev_database < database/migration_add_stripe_billing.sql
-mysql -u your_user -p your_dev_database < database/migration_add_message_limit.sql
+# テスト環境用データベース作成
+mysql -h your_dev_mysql_host -u root -p
+CREATE DATABASE line_chatbot_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'chatbot_dev'@'%' IDENTIFIED BY 'your_dev_password';
+GRANT ALL PRIVILEGES ON line_chatbot_dev.* TO 'chatbot_dev'@'%';
+FLUSH PRIVILEGES;
 
-# 本番環境用データベース
-mysql -u your_user -p your_prod_database < database/schema.sql
-mysql -u your_user -p your_prod_database < database/migration_add_stripe_billing.sql
-mysql -u your_user -p your_prod_database < database/migration_add_message_limit.sql
+# 本番環境用データベース作成
+mysql -h your_prod_mysql_host -u root -p
+CREATE DATABASE line_chatbot_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'chatbot_prod'@'%' IDENTIFIED BY 'your_prod_password';
+GRANT ALL PRIVILEGES ON line_chatbot_prod.* TO 'chatbot_prod'@'%';
+FLUSH PRIVILEGES;
 ```
+
+#### スキーマの適用
+
+```bash
+# テスト環境
+mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/schema.sql
+mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migration_add_stripe_billing.sql
+mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migration_add_subscription_support.sql
+mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migration_add_message_limit.sql
+
+# 本番環境
+mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/schema.sql
+mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/migration_add_stripe_billing.sql
+mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/migration_add_subscription_support.sql
+mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/migration_add_message_limit.sql
+```
+
+**詳細なデータベースセットアップ手順は `docs/DATABASE_SETUP.md` を参照してください。**
 
 ## デプロイ方法
 
@@ -210,6 +241,10 @@ npm run deploy:prod
 
 - テスト環境と本番環境で異なるデータベースを使用してください
 - テスト環境のデータが本番環境に影響を与えないようにしてください
+- 推奨構成:
+  - テスト環境: `line_chatbot_dev`（開発用 DB サーバー）
+  - 本番環境: `line_chatbot_prod`（本番用 DB サーバー）
+- 詳細は `docs/DATABASE_SETUP.md` を参照してください
 
 ### 4. Stripe のテストモードと本番モード
 

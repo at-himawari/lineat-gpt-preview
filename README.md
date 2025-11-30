@@ -121,9 +121,9 @@ GEMINI_RESPONSE_CHAR_LIMIT=500
 
 # MySQL設定（必須）
 DB_HOST=your_mysql_host
-DB_USER=your_mysql_user
-DB_PASSWORD=your_mysql_password
-DB_NAME=your_database_name
+DB_USER=lineat_gpt_prod_user
+DB_PASSWORD=your_prod_password_here
+DB_NAME=lineat_gpt_prod
 
 # Stripe設定（必須）
 STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
@@ -155,20 +155,51 @@ SKIP_SIGNATURE_VALIDATION=false
 
 ### 4. データベースの準備
 
-MySQL データベースに以下のスキーマとマイグレーションを適用してください：
+**重要**: テスト環境と本番環境で異なるデータベースを使用することを強く推奨します。
+
+#### 自動セットアップ（推奨）
+
+環境変数ファイルを設定した後、セットアップスクリプトを実行：
 
 ```bash
-# 初期スキーマの適用
-mysql -u your_user -p your_database < database/schema.sql
+# テスト環境
+./database/setup_dev.sh
 
-# Stripe課金機能のマイグレーション
-mysql -u your_user -p your_database < database/migration_add_stripe_billing.sql
-
-# メッセージ制限の更新（既存ユーザーがいる場合）
-mysql -u your_user -p your_database < database/migration_add_message_limit.sql
+# 本番環境
+./database/setup_prod.sh
 ```
 
-**注意**: マイグレーションは順番に実行してください。
+#### 手動セットアップ
+
+データベースの作成：
+
+```bash
+# テスト環境用
+mysql -h your_dev_mysql_host -u root -p
+CREATE DATABASE line_chatbot_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+# 本番環境用
+mysql -h your_prod_mysql_host -u root -p
+CREATE DATABASE line_chatbot_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+スキーマとマイグレーションの適用：
+
+```bash
+# テスト環境
+mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/schema.sql
+mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_stripe_billing.sql
+mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_subscription_support.sql
+mysql -h your_dev_mysql_host -u your_user -p line_chatbot_dev < database/migration_add_message_limit.sql
+
+# 本番環境
+mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/schema.sql
+mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_stripe_billing.sql
+mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_subscription_support.sql
+mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_message_limit.sql
+```
+
+**詳細なデータベースセットアップ手順は `docs/DATABASE_SETUP.md` を参照してください。**
 
 ### 5. デプロイ
 
