@@ -187,9 +187,9 @@ async function addMessageQuota(userId, amount) {
     const user = rows[0];
     const newQuota = user.message_count_3days + amount;
 
-    // 枠を追加
+    // 枠を追加（使用回数を減らす = 残り回数を増やす）
     await conn.execute(
-      "UPDATE users SET message_count_3days = message_count_3days + ? WHERE line_user_id = ?",
+      "UPDATE users SET message_count_3days = message_count_3days - ? WHERE line_user_id = ?",
       [amount, userId]
     );
 
@@ -446,13 +446,13 @@ async function processPaymentCompletion(
 
     // 商品タイプに応じて処理を分岐
     if (productType === "quota_extension") {
-      // 枠を追加
+      // 枠を追加（使用回数を減らす = 残り回数を増やす）
       const quotaExtension = parseInt(
         process.env.MESSAGE_QUOTA_EXTENSION || "300",
         10
       );
       await conn.execute(
-        "UPDATE users SET message_count_3days = message_count_3days + ? WHERE line_user_id = ?",
+        "UPDATE users SET message_count_3days = message_count_3days - ? WHERE line_user_id = ?",
         [quotaExtension, userId]
       );
       logger.info(`Quota extended for user: ${userId}`);
