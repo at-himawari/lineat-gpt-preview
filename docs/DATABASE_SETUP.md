@@ -129,6 +129,9 @@ mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migra
 
 # メッセージ制限の更新
 mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migration_add_message_limit.sql
+
+# 画像サポートのマイグレーション
+mysql -h your_dev_mysql_host -u chatbot_dev -p line_chatbot_dev < database/migration_add_image_support.sql
 ```
 
 #### 本番環境
@@ -145,6 +148,9 @@ mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/mi
 
 # メッセージ制限の更新
 mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/migration_add_message_limit.sql
+
+# 画像サポートのマイグレーション
+mysql -h your_prod_mysql_host -u chatbot_prod -p line_chatbot_prod < database/migration_add_image_support.sql
 ```
 
 ### 3. 環境変数の設定

@@ -6,7 +6,8 @@ AWS CDK を使用して AWS Lambda で Google Gemini API に接続し、LINE の
 
 - LINE Messaging API を使用したチャットボット
 - Google Gemini API による自然な会話
-- MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照）
+- **画像認識機能**: プレミアムユーザー向けに Google Gemini Vision API を使用した画像分析機能
+- MySQL でのユーザー管理と会話履歴保存（最新 10 件を参照、画像データを含む）
 - **Stripe 決済統合による 2 段階課金システム**
   - **メッセージ枠拡張**: 1 日で 30 件のメッセージ制限を超えた場合、追加の 30 件を購入可能（買い切り：300 円）
   - **プレミアムモデルアップグレード**: より高度な AI モデル（Gemini Pro）への月額サブスクリプション（月額 1,400 円）
@@ -191,12 +192,14 @@ mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/schem
 mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_stripe_billing.sql
 mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_subscription_support.sql
 mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_message_limit.sql
+mysql -h your_test_mysql_host -u your_user -p line_chatbot_test < database/migration_add_image_support.sql
 
 # 本番環境
 mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/schema.sql
 mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_stripe_billing.sql
 mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_subscription_support.sql
 mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_message_limit.sql
+mysql -h your_prod_mysql_host -u your_user -p line_chatbot_prod < database/migration_add_image_support.sql
 ```
 
 **詳細なデータベースセットアップ手順は `docs/DATABASE_SETUP.md` を参照してください。**
@@ -407,13 +410,47 @@ https://checkout.stripe.com/...
 3. ユーザーがリンクをクリックして Stripe で決済
 4. 決済完了後、自動的に枠が追加されるか、プレミアムモデルが有効化される
 
-### 画像メッセージについて
+### 画像認識機能（プレミアムユーザー限定）
 
-現在、画像メッセージには対応していません。画像を送信すると以下のメッセージが返されます：
+プレミアムサブスクリプションを持つユーザーは、画像を送信して AI に分析してもらうことができます。
 
+#### 画像送信の流れ
+
+1. **プレミアムユーザーが画像を送信**
+
+   - システムが画像を取得し、Google Gemini Vision API で分析
+   - 画像の内容を説明する応答を返信
+   - 画像とテキストを同時に送信すると、テキストの質問に基づいて画像を分析
+
+2. **非プレミアムユーザーが画像を送信**
+   - プレミアムプラン案内メッセージと決済リンクを送信
+
+#### サポートされる画像形式
+
+- JPEG（.jpg、.jpeg）
+- PNG（.png）
+- GIF（.gif）
+- WebP（.webp）
+
+#### 画像サイズ制限
+
+- 最大 10MB まで
+
+#### 画像送信の例
+
+```text
+ユーザー: [画像を送信]
+Bot: この画像には、青空の下で咲く桜の木が写っています。満開の桜が美しく、春の訪れを感じさせる風景ですね。
+
+ユーザー: [画像を送信] + "この料理の作り方を教えて"
+Bot: この画像に写っているのはパスタ料理ですね。作り方は...
 ```
-Bot: テキストメッセージでお話しいただけると嬉しいです！
-```
+
+#### 注意事項
+
+- 画像送信もメッセージ枠を 1 件消費します
+- 画像データは会話履歴に保存され、文脈を考慮した応答が可能です
+- 画像取得や分析に失敗した場合、メッセージ枠は消費されません
 
 ## CDK コマンド
 
@@ -599,13 +636,14 @@ npm run local
 
 ### アプリケーションコード
 
-- `src/handlers/webhook.js` - LINE Webhook ハンドラー
+- `src/handlers/webhook.js` - LINE Webhook ハンドラー（画像メッセージ処理を含む）
 - `src/handlers/stripe-webhook.js` - Stripe Webhook ハンドラー
-- `src/services/line.js` - LINE API 関連処理
-- `src/services/gemini.js` - Google Gemini API 処理（モデル選択機能付き）
+- `src/services/line.js` - LINE API 関連処理（画像コンテンツ取得を含む）
+- `src/services/gemini.js` - Google Gemini API 処理（モデル選択機能付き、Vision API サポート）
 - `src/services/stripe.js` - Stripe 決済処理
-- `src/services/database.js` - MySQL 操作（枠管理・トランザクション記録）
+- `src/services/database.js` - MySQL 操作（枠管理・トランザクション記録・画像データ保存）
 - `src/utils/logger.js` - ログ出力ユーティリティ
+- `src/utils/imageValidator.js` - 画像検証ユーティリティ（サイズ・形式チェック）
 
 ### インフラストラクチャコード
 
@@ -618,9 +656,12 @@ npm run local
 
 - `database/schema.sql` - データベーススキーマ
 - `database/migration_add_stripe_billing.sql` - Stripe 課金機能のマイグレーション
+- `database/migration_add_subscription_support.sql` - サブスクリプション機能のマイグレーション
 - `database/migration_add_message_limit.sql` - メッセージ制限の更新
+- `database/migration_add_image_support.sql` - 画像サポートのマイグレーション
 - `package.json` - 依存関係とスクリプト
 - `docs/DEPLOYMENT.md` - 詳細なデプロイガイド
+- `docs/DATABASE_SETUP.md` - データベースセットアップガイド
 
 ## AWS CDK の利点
 

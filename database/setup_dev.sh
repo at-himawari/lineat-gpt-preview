@@ -86,6 +86,11 @@ if [ -f database/migration_add_message_limit.sql ]; then
   echo "✓ メッセージ制限マイグレーション完了"
 fi
 
+if [ -f database/migration_add_image_support.sql ]; then
+  mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < database/migration_add_image_support.sql
+  echo "✓ 画像サポートマイグレーション完了"
+fi
+
 # テーブル確認
 echo ""
 echo "テーブル一覧:"

@@ -156,20 +156,339 @@ async function webhookHandler(event, context) {
         if (lineEvent.type === "message") {
           const messageType = lineEvent.message.type;
 
-          // 画像メッセージの場合は非対応メッセージを返す
+          // 画像メッセージの処理
           if (messageType === "image") {
             try {
-              await client.replyMessage({
-                replyToken: lineEvent.replyToken,
-                messages: [
-                  {
-                    type: "text",
-                    text: "テキストメッセージでお話しいただけると嬉しいです！",
-                  },
-                ],
-              });
+              const userId = lineEvent.source.userId;
+              logger.info("Image message received", { userId });
+
+              // データベース関連の処理
+              try {
+                const {
+                  createOrUpdateUser,
+                  getUserModelStatus,
+                } = require("../services/database");
+
+                // ユーザーを作成/更新
+                await createOrUpdateUser(userId);
+
+                // プレミアムステータスの確認
+                const userStatus = await getUserModelStatus(userId);
+
+                if (!userStatus.hasPremium) {
+                  // 非プレミアムユーザーへの案内メッセージと決済リンク送信
+                  logger.info("Non-premium user attempted to send image", {
+                    userId,
+                  });
+
+                  const {
+                    createCheckoutSession,
+                  } = require("../services/stripe");
+
+                  // プレミアムプラン決済セッションを作成
+                  const session = await createCheckoutSession(
+                    userId,
+                    "model_upgrade"
+                  );
+
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: `🖼️ 画像認識機能はプレミアムプラン限定です 🖼️\n\nプレミアムプランにアップグレードすると、画像を送信してAIに内容を説明してもらうことができます。\n\n✨ プレミアムプランの特徴：\n・画像認識機能\n・より高度なAIモデル（Gemini Pro）\n・より深い推論能力\n・より正確な回答\n\n💰 料金：月額1,400円\n※毎月自動更新されます\n※いつでも解約可能\n\n以下のリンクから決済を完了してください：\n${session.url}`,
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
+                // プレミアムユーザーの場合は画像処理を続行
+                logger.info("Premium user sent image, processing...", {
+                  userId,
+                });
+
+                // メッセージ制限チェック
+                const {
+                  checkAndUpdateMessageLimit,
+                } = require("../services/database");
+
+                const limitCheck = await checkAndUpdateMessageLimit(userId);
+                if (!limitCheck.allowed) {
+                  // 枠超過時の決済リンク送信
+                  logger.info("Message limit exceeded for image", { userId });
+
+                  const {
+                    createCheckoutSession,
+                  } = require("../services/stripe");
+                  const messageLimit = parseInt(
+                    process.env.MESSAGE_LIMIT_1DAY || "30",
+                    10
+                  );
+                  const quotaExtension = parseInt(
+                    process.env.MESSAGE_QUOTA_EXTENSION || "30",
+                    10
+                  );
+
+                  const session = await createCheckoutSession(
+                    userId,
+                    "quota_extension"
+                  );
+
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
+                // 画像コンテンツを取得
+                const { getImageContent } = require("../services/line");
+                let imageContent;
+                try {
+                  imageContent = await getImageContent(
+                    lineEvent.message.id,
+                    client
+                  );
+                } catch (lineApiError) {
+                  logger.error("LINE API error while fetching image:", {
+                    error: lineApiError.message,
+                    userId,
+                    stack: lineApiError.stack,
+                  });
+
+                  // エラー時はメッセージ枠をロールバック（要件 4.5）
+                  const {
+                    rollbackMessageLimit,
+                  } = require("../services/database");
+                  await rollbackMessageLimit(userId);
+
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: "画像の取得に失敗しました。しばらく時間をおいてから再度お試しください。",
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
+                // 画像を検証
+                const { validateImage } = require("../utils/imageValidator");
+                const validation = validateImage(imageContent);
+
+                if (!validation.valid) {
+                  logger.warn("Image validation failed", {
+                    userId,
+                    error: validation.error,
+                    imageSize: imageContent.length,
+                  });
+
+                  // エラー時はメッセージ枠をロールバック（要件 4.5）
+                  const {
+                    rollbackMessageLimit,
+                  } = require("../services/database");
+                  await rollbackMessageLimit(userId);
+
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: validation.error,
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
+                logger.info("Image validated successfully", {
+                  userId,
+                  mimeType: validation.mimeType,
+                  size: imageContent.length,
+                });
+
+                // 会話履歴を取得（画像データを含む）
+                const {
+                  getConversationHistoryWithImages,
+                  saveImageMessage,
+                } = require("../services/database");
+
+                const conversationHistory =
+                  await getConversationHistoryWithImages(userId, 10);
+
+                logger.info("Conversation history with images retrieved", {
+                  userId,
+                  historyCount: conversationHistory.length,
+                });
+
+                // 直前のメッセージがユーザーからのテキストメッセージかチェック
+                // テキスト付き画像の処理（要件 2.1, 2.2, 2.4）
+                let userPrompt = null;
+                if (conversationHistory.length > 0) {
+                  const lastMessage =
+                    conversationHistory[conversationHistory.length - 1];
+                  // 最後のメッセージがユーザーからのテキストメッセージで、画像データがない場合
+                  if (
+                    lastMessage.role === "user" &&
+                    !lastMessage.image_data &&
+                    lastMessage.content !== "[画像]"
+                  ) {
+                    userPrompt = lastMessage.content;
+                    logger.info(
+                      "Using recent text message as prompt for image analysis",
+                      {
+                        userId,
+                        promptLength: userPrompt.length,
+                      }
+                    );
+                  }
+                }
+
+                // Vision API による画像分析を実行
+                const { analyzeImage } = require("../services/gemini");
+
+                let analysis;
+                try {
+                  analysis = await analyzeImage(
+                    imageContent,
+                    conversationHistory,
+                    "premium",
+                    userPrompt,
+                    validation.mimeType
+                  );
+
+                  logger.info("Image analysis completed", {
+                    userId,
+                    analysisLength: analysis.length,
+                  });
+                } catch (visionApiError) {
+                  logger.error("Vision API error:", {
+                    error: visionApiError.message,
+                    userId,
+                    stack: visionApiError.stack,
+                  });
+
+                  // エラー時はメッセージ枠をロールバック（要件 4.5）
+                  const {
+                    rollbackMessageLimit,
+                  } = require("../services/database");
+                  await rollbackMessageLimit(userId);
+
+                  await client.replyMessage({
+                    replyToken: lineEvent.replyToken,
+                    messages: [
+                      {
+                        type: "text",
+                        text: "画像の分析に失敗しました。しばらく時間をおいてから再度お試しください。",
+                      },
+                    ],
+                  });
+                  continue;
+                }
+
+                // 画像データと MIME タイプを保存
+                await saveImageMessage(
+                  userId,
+                  imageContent,
+                  validation.mimeType
+                );
+
+                logger.info("Image data saved to database", {
+                  userId,
+                  mimeType: validation.mimeType,
+                });
+
+                // AI 応答を保存
+                await saveMessage(userId, "assistant", analysis);
+
+                logger.info("AI response saved to database", { userId });
+
+                // ユーザーへの返信
+                await client.replyMessage({
+                  replyToken: lineEvent.replyToken,
+                  messages: [
+                    {
+                      type: "text",
+                      text: analysis,
+                    },
+                  ],
+                });
+
+                logger.info("Image analysis response sent to user", { userId });
+              } catch (dbError) {
+                logger.error("Database error in image processing:", {
+                  error: dbError.message,
+                  stack: dbError.stack,
+                  userId,
+                });
+
+                // エラー時はメッセージ枠をロールバック（要件 4.5）
+                try {
+                  const {
+                    rollbackMessageLimit,
+                  } = require("../services/database");
+                  await rollbackMessageLimit(userId);
+                } catch (rollbackError) {
+                  logger.error(
+                    "Failed to rollback message limit:",
+                    rollbackError
+                  );
+                }
+
+                await client.replyMessage({
+                  replyToken: lineEvent.replyToken,
+                  messages: [
+                    {
+                      type: "text",
+                      text: "申し訳ございません。エラーが発生しました。しばらく時間をおいてから再度お試しください。",
+                    },
+                  ],
+                });
+              }
             } catch (error) {
-              logger.error("Failed to send image unsupported message:", error);
+              logger.error("Failed to process image message:", {
+                error: error.message,
+                stack: error.stack,
+                userId: lineEvent.source?.userId,
+              });
+
+              // エラー時はメッセージ枠をロールバック（要件 4.5）
+              try {
+                const userId = lineEvent.source?.userId;
+                if (userId) {
+                  const {
+                    rollbackMessageLimit,
+                  } = require("../services/database");
+                  await rollbackMessageLimit(userId);
+                }
+              } catch (rollbackError) {
+                logger.error(
+                  "Failed to rollback message limit:",
+                  rollbackError
+                );
+              }
+
+              try {
+                await client.replyMessage({
+                  replyToken: lineEvent.replyToken,
+                  messages: [
+                    {
+                      type: "text",
+                      text: "申し訳ございません。エラーが発生しました。しばらく時間をおいてから再度お試しください。",
+                    },
+                  ],
+                });
+              } catch (errorReplyError) {
+                logger.error("Failed to send error reply:", errorReplyError);
+              }
             }
             continue;
           }

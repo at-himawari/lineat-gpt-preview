@@ -105,6 +105,23 @@ async function checkAndUpdateMessageLimit(userId) {
   }
 }
 
+async function rollbackMessageLimit(userId) {
+  try {
+    const conn = await getConnection();
+
+    // メッセージカウントを1減らす（枠を返却）
+    await conn.execute(
+      "UPDATE users SET message_count_3days = GREATEST(message_count_3days - 1, 0) WHERE line_user_id = ?",
+      [userId]
+    );
+
+    logger.info(`Message quota rolled back for user: ${userId}`);
+  } catch (error) {
+    logger.error("Database error in rollbackMessageLimit:", error);
+    // ロールバック失敗はログのみ（エラーを投げない）
+  }
+}
+
 async function saveMessage(userId, role, content) {
   try {
     const conn = await getConnection();
@@ -613,11 +630,87 @@ async function deactivateSubscription(customerId, subscriptionId) {
   }
 }
 
+/**
+ * 画像メッセージを保存
+ * @param {string} userId - LINE ユーザーID
+ * @param {Buffer} imageBuffer - 画像データ
+ * @param {string} mimeType - 画像のMIMEタイプ
+ * @returns {Promise<void>}
+ */
+async function saveImageMessage(userId, imageBuffer, mimeType) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザーIDを取得
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (userRows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const userDbId = userRows[0].id;
+
+    // 画像をBase64エンコード
+    const base64Image = imageBuffer.toString("base64");
+
+    // 画像メッセージを保存
+    await conn.execute(
+      "INSERT INTO messages (user_id, role, content, image_data, image_mime_type, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+      [userDbId, "user", "[画像]", base64Image, mimeType]
+    );
+
+    logger.info(
+      `Image message saved for user: ${userId}, mimeType: ${mimeType}`
+    );
+  } catch (error) {
+    logger.error("Database error in saveImageMessage:", error);
+    throw error;
+  }
+}
+
+/**
+ * 画像を含む会話履歴を取得
+ * @param {string} userId - LINE ユーザーID
+ * @param {number} limit - 取得件数
+ * @returns {Promise<Array>} 会話履歴（画像データを含む）
+ */
+async function getConversationHistoryWithImages(userId, limit = 10) {
+  try {
+    const conn = await getConnection();
+
+    const limitInt = parseInt(limit, 10);
+
+    const [rows] = await conn.execute(
+      `SELECT m.role, m.content, m.image_data, m.image_mime_type, m.created_at
+       FROM messages m
+       JOIN users u ON m.user_id = u.id
+       WHERE u.line_user_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ${limitInt}`,
+      [userId]
+    );
+
+    logger.info(
+      `Retrieved ${rows.length} messages (with images) for user: ${userId}`
+    );
+
+    // 時系列順に並び替え
+    return rows.reverse();
+  } catch (error) {
+    logger.error("Database error in getConversationHistoryWithImages:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createOrUpdateUser,
   saveMessage,
   getConversationHistory,
   checkAndUpdateMessageLimit,
+  rollbackMessageLimit,
   addMessageQuota,
   activatePremiumModel,
   getUserModelStatus,
@@ -627,4 +720,6 @@ module.exports = {
   processPaymentCompletion,
   updateSubscriptionStatus,
   deactivateSubscription,
+  saveImageMessage,
+  getConversationHistoryWithImages,
 };
