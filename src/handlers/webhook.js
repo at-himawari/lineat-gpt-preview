@@ -696,7 +696,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・300円（買い切り）\n・${quotaExtension}件のメッセージ追加\n・1日の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,400円（サブスクリプション）\n・より高度なAIモデル\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${remainingQuota}件`,
+                          text: `💰 料金プラン 💰\n\n【メッセージ枠追加】${quotaStatus}\n・300円（買い切り）\n・${quotaExtension}件のメッセージ追加\n・1日の枠に追加されます\n・枠がなくなった際に購入可能\n\n【プレミアムモデル】${premiumStatus}\n・月額1,400円（サブスクリプション）\n・より高度なAIモデル\n・画像認識機能\n・1日100件の利用枠\n・毎月自動更新\n・いつでも解約可能\n・「プレミアム」と送信して購入\n\n現在の残り枠: ${remainingQuota}件`,
                         },
                       ],
                     });
