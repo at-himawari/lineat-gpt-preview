@@ -167,6 +167,7 @@ async function webhookHandler(event, context) {
                 const {
                   createOrUpdateUser,
                   getUserModelStatus,
+                  saveMessage,
                 } = require("../services/database");
 
                 // ユーザーを作成/更新
