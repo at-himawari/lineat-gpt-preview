@@ -197,7 +197,7 @@ async function webhookHandler(event, context) {
                     messages: [
                       {
                         type: "text",
-                        text: `🖼️ 画像認識機能はプレミアムプラン限定です 🖼️\n\nプレミアムプランにアップグレードすると、画像を送信してAIに内容を説明してもらうことができます。\n\n✨ プレミアムプランの特徴：\n・画像認識機能\n・より高度なAIモデル（Gemini Pro）\n・より深い推論能力\n・より正確な回答\n\n💰 料金：月額1,400円\n※毎月自動更新されます\n※いつでも解約可能\n\n以下のリンクから決済を完了してください：\n${session.url}`,
+                        text: `🖼️ 画像認識機能はプレミアムプラン限定です 🖼️\n\nプレミアムプランにアップグレードすると、画像を送信してAIに内容を説明してもらうことができます。\n\n✨ プレミアムプランの特徴：\n・画像認識機能\n・より高度なAIモデル（Gemini Pro）\n・より深い推論能力\n・より正確な回答\n\n💰\n･画像認識機能🖼️\n  料金：月額1,400円\n※毎月自動更新されます\n※いつでも解約可能\n\n以下のリンクから決済を完了してください：\n${session.url}`,
                       },
                     ],
                   });
@@ -217,15 +217,15 @@ async function webhookHandler(event, context) {
                 const limitCheck = await checkAndUpdateMessageLimit(userId);
                 if (!limitCheck.allowed) {
                   // 枠超過時の決済リンク送信
-                  logger.info("Message limit exceeded for image", { userId });
+                  logger.info("Message limit exceeded for image", {
+                    userId,
+                    isPremium: limitCheck.isPremium,
+                    limit: limitCheck.limit,
+                  });
 
                   const {
                     createCheckoutSession,
                   } = require("../services/stripe");
-                  const messageLimit = parseInt(
-                    process.env.MESSAGE_LIMIT_1DAY || "30",
-                    10
-                  );
                   const quotaExtension = parseInt(
                     process.env.MESSAGE_QUOTA_EXTENSION || "30",
                     10
@@ -241,7 +241,7 @@ async function webhookHandler(event, context) {
                     messages: [
                       {
                         type: "text",
-                        text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
+                        text: `申し訳ございません。1日で${limitCheck.limit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
                       },
                     ],
                   });
@@ -774,10 +774,6 @@ async function webhookHandler(event, context) {
                     const {
                       createCheckoutSession,
                     } = require("../services/stripe");
-                    const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_1DAY || "30",
-                      10
-                    );
                     const quotaExtension = parseInt(
                       process.env.MESSAGE_QUOTA_EXTENSION || "30",
                       10
@@ -794,7 +790,7 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
+                          text: `申し訳ございません。1日で${limitCheck.limit}通のメッセージ制限に達しました。\n\n追加で${quotaExtension}件のメッセージ枠を購入いただけます。\n以下のリンクから決済を完了してください：\n${session.url}`,
                         },
                       ],
                     });
@@ -802,16 +798,12 @@ async function webhookHandler(event, context) {
                     logger.error("Failed to create checkout session:", {
                       error: error.message,
                     });
-                    const messageLimit = parseInt(
-                      process.env.MESSAGE_LIMIT_1DAY || "30",
-                      10
-                    );
                     await client.replyMessage({
                       replyToken: lineEvent.replyToken,
                       messages: [
                         {
                           type: "text",
-                          text: `申し訳ございません。1日で${messageLimit}通のメッセージ制限に達しました。決済リンクの生成に失敗しました。しばらく時間をおいてから再度お試しください。`,
+                          text: `申し訳ございません。1日で${limitCheck.limit}通のメッセージ制限に達しました。決済リンクの生成に失敗しました。しばらく時間をおいてから再度お試しください。`,
                         },
                       ],
                     });

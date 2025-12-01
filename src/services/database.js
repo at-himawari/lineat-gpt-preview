@@ -55,9 +55,9 @@ async function checkAndUpdateMessageLimit(userId) {
   try {
     const conn = await getConnection();
 
-    // ユーザー情報を取得
+    // ユーザー情報を取得（プレミアムステータスも含む）
     const [rows] = await conn.execute(
-      "SELECT id, message_count_3days, count_reset_at FROM users WHERE line_user_id = ?",
+      "SELECT id, message_count_3days, count_reset_at, has_premium_model, subscription_status FROM users WHERE line_user_id = ?",
       [userId]
     );
 
@@ -70,21 +70,39 @@ async function checkAndUpdateMessageLimit(userId) {
     const resetTime = new Date(user.count_reset_at);
     const oneDayInMs = 24 * 60 * 60 * 1000;
 
+    // プレミアムユーザーかどうかを判定
+    const isPremium =
+      (user.has_premium_model === 1 || user.has_premium_model === true) &&
+      user.subscription_status === "active";
+
+    // メッセージ制限を設定（プレミアム: 100件、非プレミアム: 30件）
+    const messageLimit = isPremium
+      ? parseInt(process.env.MESSAGE_LIMIT_1DAY_PREMIUM || "100", 10)
+      : parseInt(process.env.MESSAGE_LIMIT_1DAY || "30", 10);
+
     // 1日経過していればカウントをリセット
     if (now - resetTime >= oneDayInMs) {
       await conn.execute(
         "UPDATE users SET message_count_3days = 1, count_reset_at = NOW() WHERE line_user_id = ?",
         [userId]
       );
-      logger.info(`Message count reset for user: ${userId}`);
-      return { allowed: true, count: 1 };
+      logger.info(
+        `Message count reset for user: ${userId}, isPremium: ${isPremium}, limit: ${messageLimit}`
+      );
+      return { allowed: true, count: 1, isPremium, limit: messageLimit };
     }
 
     // メッセージ制限をチェック
-    const messageLimit = parseInt(process.env.MESSAGE_LIMIT_1DAY || "30", 10);
     if (user.message_count_3days >= messageLimit) {
-      logger.warn(`Message limit reached for user: ${userId}`);
-      return { allowed: false, count: user.message_count_3days };
+      logger.warn(
+        `Message limit reached for user: ${userId}, isPremium: ${isPremium}, limit: ${messageLimit}`
+      );
+      return {
+        allowed: false,
+        count: user.message_count_3days,
+        isPremium,
+        limit: messageLimit,
+      };
     }
 
     // カウントを増やす
@@ -96,9 +114,14 @@ async function checkAndUpdateMessageLimit(userId) {
     logger.info(
       `Message count updated for user: ${userId}, count: ${
         user.message_count_3days + 1
-      }`
+      }, isPremium: ${isPremium}, limit: ${messageLimit}`
     );
-    return { allowed: true, count: user.message_count_3days + 1 };
+    return {
+      allowed: true,
+      count: user.message_count_3days + 1,
+      isPremium,
+      limit: messageLimit,
+    };
   } catch (error) {
     logger.error("Database error in checkAndUpdateMessageLimit:", error);
     throw error;
