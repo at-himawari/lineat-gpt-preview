@@ -1,13 +1,10 @@
-name: Deploy to AWS
+name: CI/CD
 
 on:
-  workflow_run:
-    workflows: ["Test"]
-    types:
-      - completed
-    branches:
-      - main
-      - develop
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       environment:
@@ -20,10 +17,59 @@ on:
         default: test
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    # workflow_runの場合、テストが成功した場合のみ実行
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd src
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd src
+          npm test
+
+      - name: Run tests with coverage
+        run: |
+          cd src
+          npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./src/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.node-version }}
+          path: src/coverage/
+
+  deploy:
+    needs: test
+    # mainまたはdevelopへのpush、または手動実行の場合のみデプロイ
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'test') }}
 
     permissions:

@@ -6,33 +6,28 @@
 
 ## ワークフローの構成
 
-### 1. Test ワークフロー (`.github/workflows/test.yml`)
+### CI/CD ワークフロー (`.github/workflows/ci-cd.yml`)
 
 **トリガー条件:**
 
 - `main` または `develop` ブランチへの push
 - `main` または `develop` ブランチへの pull request
-
-**実行内容:**
-
-- Node.js 18.x と 20.x でテストを実行
-- カバレッジレポートを生成
-- Codecov にアップロード
-
-### 2. Deploy ワークフロー (`.github/workflows/deploy.yml`)
-
-**トリガー条件:**
-
-- **Test ワークフローが成功した場合のみ自動実行** (`workflow_run`)
 - 手動実行 (workflow_dispatch)
 
-**実行内容:**
+**ジョブ構成:**
 
-- Test ワークフローの結果をチェック
-- テストが成功した場合のみ AWS へデプロイ
-- テストが失敗した場合はスキップ
+1. **Test ジョブ**
 
-**重要**: `workflow_run` により、Test ワークフローが完了してから Deploy ワークフローが起動します。テストが失敗した場合、デプロイは実行されません。
+   - Node.js 18.x と 20.x でテストを実行
+   - カバレッジレポートを生成
+   - Codecov にアップロード
+
+2. **Deploy ジョブ** (`needs: test`)
+   - **Test ジョブが成功した場合のみ実行**
+   - AWS へのデプロイ
+   - 環境: main → prod、develop → test
+
+**重要**: `needs: test` により、Test ジョブが成功しない限り Deploy ジョブは実行されません。テストが失敗した場合、デプロイは自動的にスキップされます。
 
 ## Branch Protection ルールの設定
 
