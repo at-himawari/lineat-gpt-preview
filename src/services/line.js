@@ -1,4 +1,4 @@
-const { getChatResponse } = require("./openai");
+const { getChatResponse } = require("./gemini");
 const {
   saveMessage,
   getConversationHistory,
