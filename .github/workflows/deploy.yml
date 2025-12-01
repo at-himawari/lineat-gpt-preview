@@ -1,7 +1,10 @@
 name: Deploy to AWS
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Test"]
+    types:
+      - completed
     branches:
       - main
       - develop
@@ -19,6 +22,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # workflow_runの場合、テストが成功した場合のみ実行
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'test') }}
 
     permissions:
