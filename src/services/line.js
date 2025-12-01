@@ -52,15 +52,21 @@ async function handleMessage(client, event) {
 /**
  * LINE Messaging API から画像コンテンツを取得
  * @param {string} messageId - メッセージID
- * @param {MessagingApiClient} client - LINE SDK クライアント
+ * @param {MessagingApiClient} client - LINE SDK クライアント（未使用、互換性のため残す）
  * @returns {Promise<Buffer>} 画像データ
  */
 async function getImageContent(messageId, client) {
   try {
     logger.info(`Fetching image content for message: ${messageId}`);
 
+    // LINE SDK v8では MessagingApiBlobClient を使用
+    const lineSDK = require("@line/bot-sdk");
+    const blobClient = new lineSDK.messagingApi.MessagingApiBlobClient({
+      channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+    });
+
     // LINE Content API を使用して画像を取得
-    const stream = await client.getMessageContent(messageId);
+    const stream = await blobClient.getMessageContent(messageId);
     const chunks = [];
 
     for await (const chunk of stream) {
