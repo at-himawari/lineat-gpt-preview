@@ -55,9 +55,9 @@ async function checkAndUpdateMessageLimit(userId) {
   try {
     const conn = await getConnection();
 
-    // ユーザー情報を取得
+    // ユーザー情報を取得（プレミアムステータスも含む）
     const [rows] = await conn.execute(
-      "SELECT id, message_count_3days, count_reset_at FROM users WHERE line_user_id = ?",
+      "SELECT id, message_count_3days, count_reset_at, has_premium_model, subscription_status FROM users WHERE line_user_id = ?",
       [userId]
     );
 
@@ -70,21 +70,39 @@ async function checkAndUpdateMessageLimit(userId) {
     const resetTime = new Date(user.count_reset_at);
     const oneDayInMs = 24 * 60 * 60 * 1000;
 
+    // プレミアムユーザーかどうかを判定
+    const isPremium =
+      (user.has_premium_model === 1 || user.has_premium_model === true) &&
+      user.subscription_status === "active";
+
+    // メッセージ制限を設定（プレミアム: 100件、非プレミアム: 30件）
+    const messageLimit = isPremium
+      ? parseInt(process.env.MESSAGE_LIMIT_1DAY_PREMIUM || "100", 10)
+      : parseInt(process.env.MESSAGE_LIMIT_1DAY || "30", 10);
+
     // 1日経過していればカウントをリセット
     if (now - resetTime >= oneDayInMs) {
       await conn.execute(
         "UPDATE users SET message_count_3days = 1, count_reset_at = NOW() WHERE line_user_id = ?",
         [userId]
       );
-      logger.info(`Message count reset for user: ${userId}`);
-      return { allowed: true, count: 1 };
+      logger.info(
+        `Message count reset for user: ${userId}, isPremium: ${isPremium}, limit: ${messageLimit}`
+      );
+      return { allowed: true, count: 1, isPremium, limit: messageLimit };
     }
 
     // メッセージ制限をチェック
-    const messageLimit = parseInt(process.env.MESSAGE_LIMIT_1DAY || "30", 10);
     if (user.message_count_3days >= messageLimit) {
-      logger.warn(`Message limit reached for user: ${userId}`);
-      return { allowed: false, count: user.message_count_3days };
+      logger.warn(
+        `Message limit reached for user: ${userId}, isPremium: ${isPremium}, limit: ${messageLimit}`
+      );
+      return {
+        allowed: false,
+        count: user.message_count_3days,
+        isPremium,
+        limit: messageLimit,
+      };
     }
 
     // カウントを増やす
@@ -96,12 +114,34 @@ async function checkAndUpdateMessageLimit(userId) {
     logger.info(
       `Message count updated for user: ${userId}, count: ${
         user.message_count_3days + 1
-      }`
+      }, isPremium: ${isPremium}, limit: ${messageLimit}`
     );
-    return { allowed: true, count: user.message_count_3days + 1 };
+    return {
+      allowed: true,
+      count: user.message_count_3days + 1,
+      isPremium,
+      limit: messageLimit,
+    };
   } catch (error) {
     logger.error("Database error in checkAndUpdateMessageLimit:", error);
     throw error;
+  }
+}
+
+async function rollbackMessageLimit(userId) {
+  try {
+    const conn = await getConnection();
+
+    // メッセージカウントを1減らす（枠を返却）
+    await conn.execute(
+      "UPDATE users SET message_count_3days = GREATEST(message_count_3days - 1, 0) WHERE line_user_id = ?",
+      [userId]
+    );
+
+    logger.info(`Message quota rolled back for user: ${userId}`);
+  } catch (error) {
+    logger.error("Database error in rollbackMessageLimit:", error);
+    // ロールバック失敗はログのみ（エラーを投げない）
   }
 }
 
@@ -613,11 +653,87 @@ async function deactivateSubscription(customerId, subscriptionId) {
   }
 }
 
+/**
+ * 画像メッセージを保存
+ * @param {string} userId - LINE ユーザーID
+ * @param {Buffer} imageBuffer - 画像データ
+ * @param {string} mimeType - 画像のMIMEタイプ
+ * @returns {Promise<void>}
+ */
+async function saveImageMessage(userId, imageBuffer, mimeType) {
+  try {
+    const conn = await getConnection();
+
+    // ユーザーIDを取得
+    const [userRows] = await conn.execute(
+      "SELECT id FROM users WHERE line_user_id = ?",
+      [userId]
+    );
+
+    if (userRows.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const userDbId = userRows[0].id;
+
+    // 画像をBase64エンコード
+    const base64Image = imageBuffer.toString("base64");
+
+    // 画像メッセージを保存
+    await conn.execute(
+      "INSERT INTO messages (user_id, role, content, image_data, image_mime_type, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+      [userDbId, "user", "[画像]", base64Image, mimeType]
+    );
+
+    logger.info(
+      `Image message saved for user: ${userId}, mimeType: ${mimeType}`
+    );
+  } catch (error) {
+    logger.error("Database error in saveImageMessage:", error);
+    throw error;
+  }
+}
+
+/**
+ * 画像を含む会話履歴を取得
+ * @param {string} userId - LINE ユーザーID
+ * @param {number} limit - 取得件数
+ * @returns {Promise<Array>} 会話履歴（画像データを含む）
+ */
+async function getConversationHistoryWithImages(userId, limit = 10) {
+  try {
+    const conn = await getConnection();
+
+    const limitInt = parseInt(limit, 10);
+
+    const [rows] = await conn.execute(
+      `SELECT m.role, m.content, m.image_data, m.image_mime_type, m.created_at
+       FROM messages m
+       JOIN users u ON m.user_id = u.id
+       WHERE u.line_user_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ${limitInt}`,
+      [userId]
+    );
+
+    logger.info(
+      `Retrieved ${rows.length} messages (with images) for user: ${userId}`
+    );
+
+    // 時系列順に並び替え
+    return rows.reverse();
+  } catch (error) {
+    logger.error("Database error in getConversationHistoryWithImages:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createOrUpdateUser,
   saveMessage,
   getConversationHistory,
   checkAndUpdateMessageLimit,
+  rollbackMessageLimit,
   addMessageQuota,
   activatePremiumModel,
   getUserModelStatus,
@@ -627,4 +743,6 @@ module.exports = {
   processPaymentCompletion,
   updateSubscriptionStatus,
   deactivateSubscription,
+  saveImageMessage,
+  getConversationHistoryWithImages,
 };
