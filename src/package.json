@@ -1,10 +1,22 @@
 {
   "name": "line-chatbot-lambda",
   "version": "1.0.0",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest __tests__/services __tests__/handlers",
+    "test:integration": "jest __tests__/integration"
+  },
   "dependencies": {
-    "@line/bot-sdk": "^8.0.0",
     "@google/genai": "^0.3.0",
+    "@line/bot-sdk": "^8.0.0",
     "mysql2": "^3.6.0",
     "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "fast-check": "^4.3.0",
+    "jest": "^30.2.0"
   }
 }
