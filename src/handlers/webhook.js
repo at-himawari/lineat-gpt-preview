@@ -1,4 +1,5 @@
 const logger = require("../utils/logger");
+const { showLineLoadingAnimation } = require("../services/line");
 
 // 処理済みreplyTokenを保持（Lambda実行中のみ有効）
 const processedTokens = new Set();
@@ -507,7 +508,7 @@ async function webhookHandler(event, context) {
               let conversationHistory = [];
               let dbAvailable = true;
               let modelType = "basic"; // デフォルトは基本モデル
-              let userStatus = null;
+              let limitCheck = null;
 
               // データベース関連の処理（エラーが発生しても続行）
               try {
@@ -662,7 +663,9 @@ async function webhookHandler(event, context) {
                       messages: [
                         {
                           type: "text",
-                          text: "顧客ポータルの生成に失敗しました。しばらく時間をおいてから再度お試しください。",
+                          text:
+                            error.message ||
+                            "顧客ポータルの生成に失敗しました。しばらく時間をおいてから再度お試しください。",
                         },
                       ],
                     });
@@ -763,8 +766,20 @@ async function webhookHandler(event, context) {
                   }
                 }
 
+                // 通常のAI応答に入る前にLINEのローディング表示を出す
+                if (lineEvent.source.type === "user") {
+                  try {
+                    await showLineLoadingAnimation(userId);
+                  } catch (loadingError) {
+                    logger.error("Failed to show LINE loading animation:", {
+                      error: loadingError.message,
+                      stack: loadingError.stack,
+                    });
+                  }
+                }
+
                 // メッセージ送信制限をチェック
-                const limitCheck = await checkAndUpdateMessageLimit(userId);
+                limitCheck = await checkAndUpdateMessageLimit(userId);
                 if (!limitCheck.allowed) {
                   // 枠超過時の決済リンク送信
                   try {
@@ -808,9 +823,7 @@ async function webhookHandler(event, context) {
                   continue;
                 }
 
-                // ユーザーのモデルサブスクリプション状態を確認
-                userStatus = await getUserModelStatus(userId);
-                if (userStatus.hasPremium) {
+                if (limitCheck.isPremium) {
                   modelType = "premium";
                   logger.info("User has premium model access", { userId });
                 }
@@ -818,8 +831,8 @@ async function webhookHandler(event, context) {
                 // ユーザーメッセージを保存
                 await saveMessage(userId, "user", userMessage);
 
-                // 会話履歴を取得（最新10件）
-                conversationHistory = await getConversationHistory(userId, 10);
+                // 5秒優先モードでは履歴を絞ってAI生成時間を短縮する
+                conversationHistory = await getConversationHistory(userId, 4);
                 logger.info("Conversation history retrieved", {
                   historyCount: conversationHistory.length,
                 });
@@ -855,11 +868,11 @@ async function webhookHandler(event, context) {
                 process.env.MESSAGE_LIMIT_1DAY || "30",
                 10
               );
-              const remainingQuota = userStatus
-                ? messageLimit - userStatus.quota
+              const remainingQuota = limitCheck
+                ? Math.max(limitCheck.limit - limitCheck.count, 0)
                 : messageLimit;
 
-              if (userStatus && remainingQuota <= 10) {
+              if (limitCheck && remainingQuota <= 10) {
                 // 緊急警告（10件以下）
                 quotaWarning = `\n\n --- \n⚠️ 残り枠: ${remainingQuota}件`;
               }
@@ -895,16 +908,6 @@ async function webhookHandler(event, context) {
                   truncated + "\n\n --- \n（文字数制限のため省略されました）";
               }
 
-              // AI応答を保存（DBが利用可能な場合のみ）
-              if (dbAvailable) {
-                try {
-                  const { saveMessage } = require("../services/database");
-                  await saveMessage(userId, "assistant", finalResponse);
-                } catch (dbError) {
-                  logger.error("Failed to save AI response to DB:", dbError);
-                }
-              }
-
               const replyMessage = {
                 type: "text",
                 text: finalResponse,
@@ -914,6 +917,16 @@ async function webhookHandler(event, context) {
                 replyToken: lineEvent.replyToken,
                 messages: [replyMessage],
               });
+
+              // 本回答送信後に保存し、表示を優先する
+              if (dbAvailable) {
+                try {
+                  const { saveMessage } = require("../services/database");
+                  await saveMessage(userId, "assistant", finalResponse);
+                } catch (dbError) {
+                  logger.error("Failed to save AI response to DB:", dbError);
+                }
+              }
 
               logger.info("Reply sent successfully");
             } catch (replyError) {

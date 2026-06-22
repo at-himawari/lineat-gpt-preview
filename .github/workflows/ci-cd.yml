@@ -1,112 +1,132 @@
 name: CI/CD
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment to deploy"
+        description: Deployment target
         required: true
         type: choice
         options:
-          - test
+          - dev
           - prod
-        default: test
+        default: dev
+
+env:
+  NODE_VERSION: "20.x"
+  AWS_REGION: ap-northeast-1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  ci:
+    name: CI
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "npm"
-          cache-dependency-path: src/package-lock.json
-
-      - name: Install dependencies
-        run: |
-          cd src
-          npm ci
-
-      - name: Run tests
-        run: |
-          cd src
-          npm test
-
-      - name: Run tests with coverage
-        run: |
-          cd src
-          npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./src/coverage/lcov.info
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-
-      - name: Archive test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: src/coverage/
-
-  deploy:
-    needs: test
-    # mainまたはdevelopへのpush、または手動実行の場合のみデプロイ
-    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'test') }}
-
     permissions:
-      id-token: write
       contents: read
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/package-lock.json
 
-      - name: Install dependencies
+      - name: Install infrastructure dependencies
         run: npm ci
 
-      - name: Install src dependencies
-        run: |
-          cd src
-          npm ci
+      - name: Audit infrastructure dependencies
+        run: npm audit --audit-level=high
 
-      - name: Build TypeScript
+      - name: Build CDK project
+        run: npm run build
+
+      - name: Synthesize dev stack
+        run: npm run synth:dev
+
+      - name: Install Lambda dependencies
+        working-directory: src
+        run: npm ci
+
+      - name: Audit Lambda dependencies
+        working-directory: src
+        run: npm audit --audit-level=high
+
+      - name: Test Lambda code with coverage
+        working-directory: src
+        run: npm run test:coverage -- --runInBand
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-coverage
+          path: src/coverage/
+          if-no-files-found: ignore
+
+  deploy:
+    name: Deploy
+    needs: ci
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/package-lock.json
+
+      - name: Install infrastructure dependencies
+        run: npm ci
+
+      - name: Install Lambda dependencies
+        working-directory: src
+        run: npm ci
+
+      - name: Build CDK project
         run: npm run build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-northeast-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: CDK Deploy (Test)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test' || github.ref != 'refs/heads/main'
+      - name: Deploy dev stack
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev' || github.ref == 'refs/heads/develop' }}
         run: npm run deploy:dev -- --require-approval never
         env:
-          ENVIRONMENT: test
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
           GEMINI_BASIC_MODEL: ${{ secrets.GEMINI_BASIC_MODEL }}
           GEMINI_PREMIUM_MODEL: ${{ secrets.GEMINI_PREMIUM_MODEL }}
           GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
@@ -118,21 +138,20 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           SKIP_SIGNATURE_VALIDATION: ${{ secrets.SKIP_SIGNATURE_VALIDATION }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_QUOTA_PRICE_ID: ${{ secrets.STRIPE_QUOTA_PRICE_ID }}
           STRIPE_PREMIUM_PRICE_ID: ${{ secrets.STRIPE_PREMIUM_PRICE_ID }}
           STRIPE_SUCCESS_URL: ${{ secrets.STRIPE_SUCCESS_URL }}
           STRIPE_CANCEL_URL: ${{ secrets.STRIPE_CANCEL_URL }}
 
-      - name: CDK Deploy (Prod)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' || github.ref == 'refs/heads/main'
+      - name: Deploy prod stack
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' || github.ref == 'refs/heads/main' }}
         run: npm run deploy:prod -- --require-approval never
         env:
-          ENVIRONMENT: prod
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
           GEMINI_BASIC_MODEL: ${{ secrets.GEMINI_BASIC_MODEL }}
           GEMINI_PREMIUM_MODEL: ${{ secrets.GEMINI_PREMIUM_MODEL }}
           GEMINI_MAX_TOKENS: ${{ secrets.GEMINI_MAX_TOKENS }}
@@ -144,7 +163,6 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           SKIP_SIGNATURE_VALIDATION: ${{ secrets.SKIP_SIGNATURE_VALIDATION }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_QUOTA_PRICE_ID: ${{ secrets.STRIPE_QUOTA_PRICE_ID }}
           STRIPE_PREMIUM_PRICE_ID: ${{ secrets.STRIPE_PREMIUM_PRICE_ID }}

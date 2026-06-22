@@ -3,6 +3,7 @@ const logger = require("../utils/logger");
 
 // Stripe クライアントの初期化
 let stripeClient = null;
+let billingPortalConfigurationId = null;
 
 function getStripeClient() {
   if (!stripeClient) {
@@ -72,6 +73,66 @@ async function retryWithExponentialBackoff(fn, maxRetries = 3) {
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
+}
+
+async function ensureBillingPortalConfiguration(stripe, returnUrl) {
+  if (billingPortalConfigurationId) {
+    return billingPortalConfigurationId;
+  }
+
+  const existingConfigurations = await retryWithExponentialBackoff(async () => {
+    return await stripe.billingPortal.configurations.list({
+      active: true,
+      is_default: true,
+      limit: 1,
+    });
+  });
+
+  const defaultConfiguration = existingConfigurations.data?.[0];
+  if (defaultConfiguration?.id) {
+    billingPortalConfigurationId = defaultConfiguration.id;
+    return billingPortalConfigurationId;
+  }
+
+  const createdConfiguration = await retryWithExponentialBackoff(async () => {
+    return await stripe.billingPortal.configurations.create({
+      business_profile: {
+        headline: "サブスクリプションとお支払いの管理",
+      },
+      default_return_url: returnUrl,
+      features: {
+        customer_update: {
+          allowed_updates: ["email", "name"],
+          enabled: true,
+        },
+        invoice_history: {
+          enabled: true,
+        },
+        payment_method_update: {
+          enabled: true,
+        },
+        subscription_cancel: {
+          cancellation_reason: {
+            enabled: true,
+            options: [
+              "too_expensive",
+              "missing_features",
+              "switched_service",
+              "unused",
+              "other",
+            ],
+          },
+          enabled: true,
+          mode: "at_period_end",
+          proration_behavior: "none",
+        },
+      },
+      name: "LINE bot customer portal",
+    });
+  });
+
+  billingPortalConfigurationId = createdConfiguration.id;
+  return billingPortalConfigurationId;
 }
 
 // Checkout セッションを作成
@@ -482,9 +543,15 @@ async function createCustomerPortalSession(customerId, returnUrl) {
       returnUrl = process.env.STRIPE_SUCCESS_URL || "https://line.me";
     }
 
+    const configurationId = await ensureBillingPortalConfiguration(
+      stripe,
+      returnUrl
+    );
+
     // 顧客ポータルセッションを作成
     const session = await retryWithExponentialBackoff(async () => {
       return await stripe.billingPortal.sessions.create({
+        configuration: configurationId,
         customer: customerId,
         return_url: returnUrl,
       });
@@ -497,8 +564,11 @@ async function createCustomerPortalSession(customerId, returnUrl) {
 
     return { url: session.url };
   } catch (error) {
+    const rawMessage = error.raw?.message || error.message || "";
+
     logger.error("Error creating customer portal session", {
       error: error.message,
+      rawMessage,
       errorType: error.type,
       statusCode: error.statusCode,
       customerId,
@@ -509,12 +579,24 @@ async function createCustomerPortalSession(customerId, returnUrl) {
       throw new Error(
         "決済システムの認証エラーが発生しました。管理者にお問い合わせください。"
       );
+    } else if (
+      /similar object exists in test mode/i.test(rawMessage) ||
+      /No such customer/i.test(rawMessage)
+    ) {
+      throw new Error(
+        "保存されている決済情報が現在の本番環境と一致しません。お手数ですが、サポートにご連絡いただくか、必要に応じて再度お申し込みください。"
+      );
     } else {
       throw new Error(
         "顧客ポータルの生成中にエラーが発生しました。しばらく時間をおいてから再度お試しください。"
       );
     }
   }
+}
+
+function resetStripeStateForTests() {
+  stripeClient = null;
+  billingPortalConfigurationId = null;
 }
 
 module.exports = {
@@ -524,4 +606,5 @@ module.exports = {
   verifyWebhookSignature,
   handleWebhookEvent,
   createCustomerPortalSession,
+  resetStripeStateForTests,
 };

@@ -7,6 +7,15 @@ const mockStripe = {
       create: jest.fn(),
     },
   },
+  billingPortal: {
+    configurations: {
+      list: jest.fn(),
+      create: jest.fn(),
+    },
+    sessions: {
+      create: jest.fn(),
+    },
+  },
   webhooks: {
     constructEvent: jest.fn(),
   },
@@ -27,12 +36,19 @@ const stripeService = require("../../services/stripe");
 describe("Stripe Checkout セッション作成のテスト", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    stripeService.resetStripeStateForTests();
     // 環境変数の設定
     process.env.STRIPE_SECRET_KEY = "sk_test_mock";
     process.env.STRIPE_QUOTA_PRICE_ID = "price_test_quota";
     process.env.STRIPE_PREMIUM_PRICE_ID = "price_test_premium";
     process.env.STRIPE_SUCCESS_URL = "https://example.com/success";
     process.env.STRIPE_CANCEL_URL = "https://example.com/cancel";
+    mockStripe.billingPortal.configurations.list.mockResolvedValue({
+      data: [],
+    });
+    mockStripe.billingPortal.configurations.create.mockResolvedValue({
+      id: "bpc_test_default",
+    });
   });
 
   describe("枠拡張（quota_extension）セッションの作成", () => {
@@ -308,6 +324,65 @@ describe("Stripe Checkout セッション作成のテスト", () => {
       ).rejects.toThrow();
 
       expect(mockStripe.checkout.sessions.create).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("顧客ポータルセッション作成", () => {
+    test("既存のデフォルト configuration を使ってポータルセッションを作成する", async () => {
+      mockStripe.billingPortal.configurations.list.mockResolvedValue({
+        data: [{ id: "bpc_existing_default" }],
+      });
+      mockStripe.billingPortal.sessions.create.mockResolvedValue({
+        url: "https://billing.stripe.com/p/session/test_123",
+      });
+
+      const result = await stripeService.createCustomerPortalSession(
+        "cus_test_001",
+        "https://line.me"
+      );
+
+      expect(result).toEqual({
+        url: "https://billing.stripe.com/p/session/test_123",
+      });
+      expect(mockStripe.billingPortal.configurations.create).not.toHaveBeenCalled();
+      expect(mockStripe.billingPortal.sessions.create).toHaveBeenCalledWith({
+        configuration: "bpc_existing_default",
+        customer: "cus_test_001",
+        return_url: "https://line.me",
+      });
+    });
+
+    test("configuration がない場合は自動作成してポータルセッションを作成する", async () => {
+      mockStripe.billingPortal.sessions.create.mockResolvedValue({
+        url: "https://billing.stripe.com/p/session/test_456",
+      });
+
+      const result = await stripeService.createCustomerPortalSession(
+        "cus_test_002",
+        "https://line.me"
+      );
+
+      expect(result).toEqual({
+        url: "https://billing.stripe.com/p/session/test_456",
+      });
+      expect(mockStripe.billingPortal.configurations.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          default_return_url: "https://line.me",
+          features: expect.objectContaining({
+            invoice_history: { enabled: true },
+            payment_method_update: { enabled: true },
+            subscription_cancel: expect.objectContaining({
+              enabled: true,
+              mode: "at_period_end",
+            }),
+          }),
+        })
+      );
+      expect(mockStripe.billingPortal.sessions.create).toHaveBeenCalledWith({
+        configuration: "bpc_test_default",
+        customer: "cus_test_002",
+        return_url: "https://line.me",
+      });
     });
   });
 });

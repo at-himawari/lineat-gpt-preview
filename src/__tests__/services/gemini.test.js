@@ -23,12 +23,14 @@ const { getChatResponse } = require("../../services/gemini");
 describe("Gemini Service - getChatResponse", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers();
     process.env.GEMINI_API_KEY = "test_api_key";
     process.env.GEMINI_BASIC_MODEL = "gemini-2.0-flash-exp";
     process.env.GEMINI_PREMIUM_MODEL = "gemini-2.0-flash-thinking-exp-01-21";
-    process.env.GEMINI_RESPONSE_CHAR_LIMIT = "300";
+    process.env.GEMINI_RESPONSE_CHAR_LIMIT = "800";
     process.env.GEMINI_MAX_TOKENS = "8000";
     process.env.GEMINI_TEMPERATURE = "1";
+    process.env.GEMINI_TIMEOUT_MS = "6500";
   });
 
   test("基本モデルで応答を生成する", async () => {
@@ -47,6 +49,9 @@ describe("Gemini Service - getChatResponse", () => {
       expect.objectContaining({
         model: "gemini-2.0-flash-exp",
         contents: expect.any(Array),
+        config: expect.not.objectContaining({
+          tools: expect.anything(),
+        }),
       })
     );
   });
@@ -87,7 +92,41 @@ describe("Gemini Service - getChatResponse", () => {
     const result = await getChatResponse("元気？", conversationHistory);
 
     expect(result).toBe("元気です！");
-    expect(mockGenerateContentStream).toHaveBeenCalled();
+    expect(mockGenerateContentStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.arrayContaining([
+          expect.objectContaining({
+            parts: [{ text: "こんにちは" }],
+          }),
+          expect.objectContaining({
+            parts: [{ text: "こんにちは！" }],
+          }),
+          expect.objectContaining({
+            parts: [{ text: "元気？" }],
+          }),
+        ]),
+      })
+    );
+  });
+
+  test("最新情報が必要そうな文面では検索ツールを有効化する", async () => {
+    const mockResponse = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { text: "今日の天気です。" };
+      },
+    };
+
+    mockGenerateContentStream.mockResolvedValue(mockResponse);
+
+    await getChatResponse("今日の天気を調べて", []);
+
+    expect(mockGenerateContentStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          tools: [{ googleSearch: {} }],
+        }),
+      })
+    );
   });
 
   test("複数チャンクのストリーミング応答を結合する", async () => {
@@ -124,5 +163,23 @@ describe("Gemini Service - getChatResponse", () => {
     mockGenerateContentStream.mockRejectedValue(new Error("API Error"));
 
     await expect(getChatResponse("テスト")).rejects.toThrow();
+  });
+
+  test("タイムアウト時は短文フォールバックを返す", async () => {
+    process.env.GEMINI_TIMEOUT_MS = "10";
+
+    const mockResponse = {
+      [Symbol.asyncIterator]: async function* () {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        yield { text: "遅い応答" };
+      },
+    };
+
+    mockGenerateContentStream.mockResolvedValue(mockResponse);
+
+    const result = await getChatResponse("要件を整理して");
+
+    expect(result).toContain("要点を先に返します");
+    await new Promise((resolve) => setTimeout(resolve, 30));
   });
 });

@@ -16,18 +16,21 @@
 
 **ジョブ構成:**
 
-1. **Test ジョブ**
+1. **CI ジョブ**
 
-   - Node.js 18.x と 20.x でテストを実行
-   - カバレッジレポートを生成
-   - Codecov にアップロード
+   - Node.js 20.x で依存関係を固定インストール
+   - ルートと `src` の `npm audit --audit-level=high` を実行
+   - CDK TypeScript ビルドと `dev` スタックの synth を実行
+   - Lambda の Jest テストをカバレッジ付きで実行
+   - カバレッジを GitHub Actions artifact として保存
 
-2. **Deploy ジョブ** (`needs: test`)
-   - **Test ジョブが成功した場合のみ実行**
+2. **Deploy ジョブ** (`needs: ci`)
+   - **CI ジョブが成功した場合のみ実行**
    - AWS へのデプロイ
-   - 環境: main → prod、develop → test
+   - 環境: main → prod、develop → dev
+   - 手動実行時は `dev` または `prod` を選択
 
-**重要**: `needs: test` により、Test ジョブが成功しない限り Deploy ジョブは実行されません。テストが失敗した場合、デプロイは自動的にスキップされます。
+**重要**: `needs: ci` により、CI ジョブが成功しない限り Deploy ジョブは実行されません。検証が失敗した場合、デプロイは自動的にスキップされます。
 
 ## Branch Protection ルールの設定
 
@@ -50,9 +53,7 @@ Branch name pattern: main
   ☑ Require branches to be up to date before merging
 
   Status checks that are required:
-  - test (Node.js 18.x)
-  - test (Node.js 20.x)
-  - lint
+  - CI
 
 ☑ Require conversation resolution before merging
 
@@ -70,9 +71,7 @@ Branch name pattern: develop
   ☑ Require branches to be up to date before merging
 
   Status checks that are required:
-  - test (Node.js 18.x)
-  - test (Node.js 20.x)
-  - lint
+  - CI
 ```
 
 ## 動作フロー
@@ -80,20 +79,20 @@ Branch name pattern: develop
 ### Pull Request の場合
 
 1. 開発者が feature ブランチから `main` または `develop` へ PR を作成
-2. **Test ワークフロー**が自動実行される
+2. **CI/CD ワークフローの CI ジョブ**が自動実行される
 3. テストが成功すると、PR のステータスチェックが緑色になる
 4. Branch Protection により、テストが成功しないとマージできない
-5. マージ後、**Test ワークフロー**が再度実行される
-6. Test ワークフローが成功すると、**Deploy ワークフロー**が自動的にトリガーされる
-7. Deploy ワークフローがテスト結果を確認し、成功していればデプロイを実行
+5. マージ後、**CI/CD ワークフローの CI ジョブ**が再度実行される
+6. CI ジョブが成功すると、同じワークフロー内の Deploy ジョブが実行される
+7. Deploy ジョブが `main` は `prod`、`develop` は `dev` にデプロイする
 
 ### Direct Push の場合（推奨しません）
 
 1. `main` または `develop` ブランチへ直接 push
 2. Branch Protection により、テストが成功していない場合は push が拒否される
-3. push が成功した場合、**Test ワークフロー**が実行される
-4. Test ワークフローが成功すると、**Deploy ワークフロー**が自動的にトリガーされる
-5. Deploy ワークフローがテスト結果を確認し、成功していればデプロイを実行
+3. push が成功した場合、**CI/CD ワークフローの CI ジョブ**が実行される
+4. CI ジョブが成功すると、同じワークフロー内の Deploy ジョブが実行される
+5. Deploy ジョブが対象環境へデプロイする
 
 ## テストが失敗した場合
 
@@ -108,7 +107,7 @@ Branch name pattern: develop
 1. GitHub リポジトリの **Actions** タブに移動
 2. **Deploy to AWS** ワークフローを選択
 3. **Run workflow** をクリック
-4. 環境（test または prod）を選択
+4. 環境（dev または prod）を選択
 5. **Run workflow** を実行
 
 **注意**: 手動デプロイの場合でも、テストが成功していることを確認してから実行してください。
@@ -117,7 +116,7 @@ Branch name pattern: develop
 
 ### テストが失敗してマージできない
 
-1. ローカルで `npm test` を実行してテストを確認
+1. ローカルで `cd src && npm test` を実行してテストを確認
 2. 失敗したテストを修正
 3. 修正をコミット・プッシュ
 4. テストが成功するまで繰り返す

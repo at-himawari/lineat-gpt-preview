@@ -5,6 +5,31 @@ const {
   createOrUpdateUser,
 } = require("./database");
 const logger = require("../utils/logger");
+const LINE_LOADING_SECONDS = 30;
+
+async function showLineLoadingAnimation(
+  userId,
+  loadingSeconds = LINE_LOADING_SECONDS
+) {
+  const response = await fetch("https://api.line.me/v2/bot/chat/loading/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+    },
+    body: JSON.stringify({
+      chatId: userId,
+      loadingSeconds,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(
+      `LINE loading animation request failed: ${response.status} ${errorBody}`
+    );
+  }
+}
 
 async function handleMessage(client, event) {
   try {
@@ -12,26 +37,38 @@ async function handleMessage(client, event) {
     const userMessage = event.message.text;
     const replyToken = event.replyToken;
 
+    if (event.source.type !== "group" && event.source.type !== "room") {
+      try {
+        await showLineLoadingAnimation(userId);
+      } catch (loadingError) {
+        logger.error("Failed to show LINE loading animation:", {
+          error: loadingError.message,
+          stack: loadingError.stack,
+        });
+      }
+    }
+
     // ユーザー情報を作成/更新
     await createOrUpdateUser(userId);
 
     // ユーザーメッセージを保存
     await saveMessage(userId, "user", userMessage);
 
-    // 会話履歴を取得（最新10件）
-    const conversationHistory = await getConversationHistory(userId, 10);
+    // 5秒優先モードでは履歴を絞ってAI生成時間を短縮する
+    const conversationHistory = await getConversationHistory(userId, 4);
 
     // Azure OpenAIから応答を取得
-    const aiResponse = await getChatResponse(conversationHistory);
+    const aiResponse = await getChatResponse(
+      userMessage,
+      conversationHistory.slice(0, -1)
+    );
 
-    // AI応答を保存
-    await saveMessage(userId, "assistant", aiResponse);
-
-    // LINEに返信
     await client.replyMessage(replyToken, {
       type: "text",
       text: aiResponse,
     });
+
+    await saveMessage(userId, "assistant", aiResponse);
 
     logger.info(`Message handled for user: ${userId}`);
   } catch (error) {
@@ -90,4 +127,5 @@ async function getImageContent(messageId, client) {
 module.exports = {
   handleMessage,
   getImageContent,
+  showLineLoadingAnimation,
 };
